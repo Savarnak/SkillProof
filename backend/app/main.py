@@ -6,6 +6,7 @@ from pathlib import Path
 from app.config import settings
 from app.schemas.curriculum import Curriculum
 from app.schemas.candidate import Candidate
+from app.api.routes import router as interview_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -21,6 +22,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Routers
+app.include_router(interview_router)
+
 
 @app.get("/")
 def read_root():
