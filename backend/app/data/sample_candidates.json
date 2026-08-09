@@ -1,0 +1,105 @@
+[
+  {
+    "candidate_id": "cand_alex_rivers_001",
+    "name": "Alex Rivers",
+    "email": "alex.rivers@demo.skillproof.internal",
+    "is_synthetic_demo": true,
+    "background_summary": "5 years of Python backend engineering. Implemented basic vector search with pgvector.",
+    "target_role": "Senior AI Systems Engineer",
+    "completed_missions": [
+      {
+        "mission_id": "mission_pgvector_setup",
+        "day_id": "day_1_embeddings",
+        "score": 0.92,
+        "completed_at": "2026-08-01T10:00:00Z"
+      },
+      {
+        "mission_id": "mission_basic_rag",
+        "day_id": "day_2_rag",
+        "score": 0.85,
+        "completed_at": "2026-08-03T14:30:00Z"
+      }
+    ],
+    "learning_signals": {
+      "demonstrated_strengths": [
+        "Strong understanding of relational schemas & pgvector queries",
+        "Clear grasp of dot product vs cosine distance math"
+      ],
+      "known_gaps": [
+        "Limited experience with cross-encoder rerankers",
+        "Has not implemented agent state persistence loops"
+      ],
+      "expression_notes": "Tends to give short, concise answers. May need explicit prompting to elaborate on high-level system design trade-offs.",
+      "suspected_misconceptions": []
+    }
+  },
+  {
+    "candidate_id": "cand_maya_lin_002",
+    "name": "Maya Lin",
+    "email": "maya.lin@demo.skillproof.internal",
+    "is_synthetic_demo": true,
+    "background_summary": "Computer Science Master's graduate. Deep theoretical knowledge of NLP and machine learning algorithms.",
+    "target_role": "AI Research & Systems Engineer",
+    "completed_missions": [
+      {
+        "mission_id": "mission_transformer_math",
+        "day_id": "day_1_embeddings",
+        "score": 0.98,
+        "completed_at": "2026-08-02T11:15:00Z"
+      },
+      {
+        "mission_id": "mission_eval_frameworks",
+        "day_id": "day_5_eval",
+        "score": 0.95,
+        "completed_at": "2026-08-05T09:00:00Z"
+      }
+    ],
+    "learning_signals": {
+      "demonstrated_strengths": [
+        "Articulates complex mathematical concepts with high clarity",
+        "Deep familiarity with evaluation metrics (BLEU, ROUGE, Ragas)"
+      ],
+      "known_gaps": [
+        "Less practical experience with async event loops and production microservices"
+      ],
+      "expression_notes": "Highly articulate, uses formal technical terms accurately.",
+      "suspected_misconceptions": []
+    }
+  },
+  {
+    "candidate_id": "cand_sam_patel_003",
+    "name": "Sam Patel",
+    "email": "sam.patel@demo.skillproof.internal",
+    "is_synthetic_demo": true,
+    "background_summary": "Full-stack developer transitioning to AI engineering. Built prototype RAG applications with LangChain.",
+    "target_role": "Applied AI Developer",
+    "completed_missions": [
+      {
+        "mission_id": "mission_langchain_intro",
+        "day_id": "day_2_rag",
+        "score": 0.78,
+        "completed_at": "2026-08-04T16:45:00Z"
+      },
+      {
+        "mission_id": "mission_tool_calling",
+        "day_id": "day_3_agents",
+        "score": 0.80,
+        "completed_at": "2026-08-06T12:00:00Z"
+      }
+    ],
+    "learning_signals": {
+      "demonstrated_strengths": [
+        "Fast prototype builder",
+        "Comfortable using multi-agent and tool-calling SDKs"
+      ],
+      "known_gaps": [
+        "Underestimating vector index RAM usage",
+        "Needs deeper grounding on hybrid retrieval techniques"
+      ],
+      "expression_notes": "Enthusiastic and conversational tone.",
+      "suspected_misconceptions": [
+        "Believes adding RAG to an LLM completely eliminates hallucination risks"
+      ]
+    }
+  }
+]
