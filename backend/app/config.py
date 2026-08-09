@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o")
     
+    # Breeth AI Memory Layer Settings
+    BREETH_API_KEY: str = os.getenv("BREETH_API_KEY", "")
+    BREETH_BASE_URL: str = os.getenv("BREETH_BASE_URL", "https://api.thebreeth.com/v1")
+    BREETH_ENABLED: bool = os.getenv("BREETH_ENABLED", "true").lower() in ("true", "1", "yes")
+
     # Interview Deterministic Constraints
     MIN_REQUIRED_QUESTIONS: int = 8
     MIN_REQUIRED_CURRICULUM_DAYS: int = 4

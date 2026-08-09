@@ -91,3 +91,46 @@ This log documents the usage of AI tools during the development of SkillProof, f
 * **Human Rationale & Control**:
   - Preserved internal PS2 backend curriculum day tracking (`minQuestions = 8`, `minCurriculumDays = 4`) while correcting the candidate UI to present genuine topic context rather than artificial day increments.
   - Supported both Learning Journey mode and Job Description mode without creating duplicate interview engines.
+
+---
+
+### Entry 006 — Longitudinal Candidate Memory Layer with Breeth AI
+* **Date**: 2026-08-09
+* **Phase**: Longitudinal Candidate Memory Layer Integration
+
+---
+
+### Entry 007 — Interview Adaptivity Refinement & Depth Ladder Optimization
+* **Date**: 2026-08-09
+* **Phase**: Refinements — Grounded Adaptivity, Adaptive Depth Ladder, & Answer-Aware Question Generation
+* **AI Tool Used**: Antigravity AI Coding Assistant (Gemini 3.6 Flash)
+* **Tasks Executed**:
+  1. Refined decision hierarchy in `QuestionGenerator.decide_next_action()` prioritizing candidate evidence and depth ladder progression (Depth 1 Concept Recognition -> Depth 2 Explanation -> Depth 3 Reasoning -> Depth 4 Practical Application -> Depth 5 System Design -> Depth 6 Transfer) on active topics before switching curriculum days.
+  2. Enforced topic transitions only when a topic reaches Depth >= 4, collects >= 2 strong evidence items, or mandatory 4-day coverage requires exploring an uncovered curriculum day before Question 8.
+  3. Implemented answer-aware question generation in `llm.py` extracting key technical phrases (`"direction"`, `"cosine"`, `"vector"`, `"page fault"`, `"isolation"`, `"acid"`, `"transaction"`, `"autowired"`, `"heap"`, `"stack"`) from candidate responses to ground follow-up questions explicitly in candidate statements.
+  4. Formatted natural topic transitions (`"Your technical explanation of [Topic A] is solid. Let me build on that and move into [Topic B]: ..."`).
+  5. Updated error handling and Pydantic validation across PS2 adapter routes (`POST /api/interview`) and engine state tracking, keeping 100% backward compatibility.
+  6. Created automated test suite `backend/tests/test_adaptivity_cases.py` verifying all 6 adaptivity cases (Strong Answer, Weak/Incomplete Answer, "I don't know", Misconception Probe, Progressive Depth Ladder, and Natural Topic Transition).
+---
+
+### Entry 008 — Post-Interview Intelligence Layer & Hero Answer Coach
+* **Date**: 2026-08-09
+* **Phase**: Post-Interview Intelligence Layer Integration
+* **AI Tool Used**: Antigravity AI Coding Assistant (Gemini 3.6 Flash)
+* **Tasks Executed**:
+  1. Enhanced report schemas (`backend/app/report/schemas.py`) adding `CoachedAnswer`, `MisconceptionInsight`, `PersistentGapInsight`, `KnowledgeVsExpressionInsight`, and `ActionPlan`.
+  2. Implemented Post-Interview Intelligence in `ReportGenerator` (`backend/app/report/generator.py`):
+     - **Psychologically Supportive Profile**: Progress indicators across Technical Knowledge, Application, Reasoning, Technical Expression, and Transfer Ability.
+     - **Knowledge vs Expression Distinction**: Detects High Knowledge / Weak Expression vs Clear Communication / Incomplete Knowledge without confusing communication with technical gaps.
+     - **"You knew it. You just didn't show it clearly."** Special Insight banner.
+     - **Hero Feature — Answer Coach**: Collapsible answer cards rendering original candidate answers, specific strengths, root causes (`whatHeldItBack`), polished versions preserving candidate's demonstrated knowledge (no invented facts), and step-by-step Delivery Formulas (`CONCEPT QUESTION`, `SYSTEM DESIGN`, `EXPERIENCE QUESTION`, `TECHNICAL COMPARISON`).
+     - **Misconception Report**: Misconception, What's Actually True, How to Remember It (Mental Model), and Status.
+     - **Growth / Memory Section**: Displays Breeth memory diffs for returning candidates or `"Baseline established"` for first-time candidates.
+     - **Persistent Gap Section**: Highlights `"WORTH FOCUSING ON"` and `"GAP RESOLVED"` topics.
+     - **Action Plan**: Generates exactly 3 evidence-backed actionable next steps.
+  3. Created frontend React components `AnswerCoach.tsx`, `MisconceptionReportCard.tsx`, `ActionPlanCard.tsx`, and updated `ReportPage` (`/report/[id]`) with mobile-first responsiveness (~390px width ready) and `← Back to Home` header navigation.
+  4. Preserved official PS2 API contract (`POST /api/interview`) returning `{ "reply": "Interview completed.", "done": true, "feedback": {...} }`.
+  5. Built automated test suite (`backend/tests/test_post_interview_intelligence.py`) verifying all 8 test scenarios (A through H).
+* **Human Rationale & Control**:
+  - Transformed raw scores into a psychologically supportive coaching experience.
+  - Guaranteed that answer polishing preserves the candidate's actual demonstrated knowledge rather than fabricating false experience or fake technical claims.

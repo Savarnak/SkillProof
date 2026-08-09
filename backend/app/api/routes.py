@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from app.interview.engine import interview_engine
 from app.interview.schemas import InterviewState, InterviewReport
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
+
+from app.schemas.candidate import Candidate
 
 class StartInterviewRequest(BaseModel):
     candidate_id: str = "cand_alex_rivers_001"
@@ -27,6 +29,116 @@ class AnswerResponse(BaseModel):
     state: InterviewState
     next_question: Optional[str] = None
     is_completed: bool = False
+
+# -----------------------------------------------------------------------------
+# OFFICIAL PS2 EVALUATOR ADAPTER (POST /api/interview)
+# -----------------------------------------------------------------------------
+class PS2Feedback(BaseModel):
+    summary: str
+    strengths: List[str] = Field(default_factory=list)
+    gaps: List[str] = Field(default_factory=list)
+    next: List[str] = Field(default_factory=list)
+
+class PS2InterviewRequest(BaseModel):
+    sessionId: str = Field(..., description="Unique interview session identifier")
+    candidate: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
+class PS2InterviewResponse(BaseModel):
+    reply: str
+    done: bool = False
+    feedback: Optional[PS2Feedback] = None
+
+import datetime
+
+@router.post("", response_model=PS2InterviewResponse)
+@router.post("/", response_model=PS2InterviewResponse)
+def ps2_interview_adapter(req: PS2InterviewRequest):
+    session_id = req.sessionId.strip()
+    existing_state = interview_engine.session_store.get_session(session_id)
+
+    if not existing_state:
+        # Case 1: Initialize New Session
+        cand_dict = req.candidate or {}
+        cand_id = cand_dict.get("candidate_id") or cand_dict.get("id") or f"cand_{session_id}"
+        cand_name = cand_dict.get("name") or "Alex Rivers"
+
+        if cand_dict:
+            try:
+                raw_missions = cand_dict.get("completed_missions", [])
+                formatted_missions = []
+                for m in raw_missions:
+                    if isinstance(m, dict):
+                        m_copy = m.copy()
+                        if "completed_at" not in m_copy:
+                            m_copy["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        formatted_missions.append(m_copy)
+
+                cand_obj = Candidate(
+                    candidate_id=cand_id,
+                    name=cand_name,
+                    email=cand_dict.get("email", f"{cand_id}@demo.skillproof.internal"),
+                    is_synthetic_demo=False,
+                    background_summary=cand_dict.get("background_summary", ""),
+                    target_role=cand_dict.get("target_role", "Senior AI Systems Engineer"),
+                    completed_missions=formatted_missions
+                )
+                interview_engine._candidates_cache[cand_id] = cand_obj
+            except Exception:
+                pass
+
+        state, first_question = interview_engine.start_interview(
+            candidate_id=cand_id,
+            curriculum_id="curr_ai_eng_v1"
+        )
+
+        if state.interviewId != session_id:
+            old_id = state.interviewId
+            state.interviewId = session_id
+            interview_engine.session_store._sessions.pop(old_id, None)
+            interview_engine.session_store._sessions[session_id] = state
+
+        return PS2InterviewResponse(
+            reply=first_question,
+            done=False
+        )
+
+    # Case 2: Submit Candidate Answer message to existing session
+    if req.message:
+        state, next_question = interview_engine.submit_answer(
+            session_id=session_id,
+            candidate_answer=req.message
+        )
+    else:
+        state = existing_state
+        next_question = state.conversationHistory[-1].question_text if state.conversationHistory else None
+
+    # Check if interview complete
+    if state.interviewStatus == "completed" or next_question is None:
+        summary_txt = f"Completed adaptive technical evaluation across {state.questionCount} questions covering {len(state.curriculumDaysCovered)} curriculum days."
+        strengths_lst = state.strengths[:5] or ["Demonstrated solid core technical understanding"]
+        gaps_lst = state.knowledgeGaps[:5] or state.expressionGaps[:5] or ["Practice system design trade-offs"]
+        next_lst = [
+            "Review B+ Tree indexing & transaction isolation",
+            "Practice virtual memory page fault resolution",
+            "Explore production system design scenarios"
+        ]
+
+        return PS2InterviewResponse(
+            reply="Interview completed.",
+            done=True,
+            feedback=PS2Feedback(
+                summary=summary_txt,
+                strengths=strengths_lst,
+                gaps=gaps_lst,
+                next=next_lst
+            )
+        )
+
+    return PS2InterviewResponse(
+        reply=next_question,
+        done=False
+    )
 
 @router.post("/start", response_model=StartInterviewResponse)
 def start_interview(req: StartInterviewRequest):
@@ -103,5 +215,15 @@ def get_interview_report(interview_id: str):
         raise
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from app.memory.service import candidate_memory_service
+
+@router.delete("/candidate/{candidate_id}/memory")
+def delete_candidate_memory(candidate_id: str):
+    try:
+        success = candidate_memory_service.delete_candidate_memories(candidate_id)
+        return {"status": "deleted", "candidate_id": candidate_id, "success": success}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

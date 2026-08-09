@@ -150,6 +150,60 @@ export interface RefinementDiff {
   whatCouldImprove: string;
 }
 
+export interface GrowthItem {
+  topic: string;
+  previousLevel: number;
+  currentLevel: number;
+  growthAmount: number;
+  evidence: string;
+}
+
+export interface ProgressChangeItem {
+  topic: string;
+  previousStatus: string;
+  currentStatus: string;
+  changeTag: string;
+}
+
+export interface CoachedAnswer {
+  questionIndex: number;
+  questionText: string;
+  originalAnswer: string;
+  strengths: string[];
+  whatHeldItBack: string;
+  interviewReadyVersion: string;
+  deliveryFormulaName: string;
+  deliveryFormulaSteps: string[];
+}
+
+export interface MisconceptionInsight {
+  topic: string;
+  misconception: string;
+  whatsActuallyTrue: string;
+  howToRememberIt: string;
+  status: string;
+}
+
+export interface PersistentGapInsight {
+  topic: string;
+  whyItMatters: string;
+  whatToPractice: string;
+  suggestedNextChallenge: string;
+  isResolved?: boolean;
+}
+
+export interface KnowledgeVsExpressionInsight {
+  show: boolean;
+  headline: string;
+  technicalDemonstrated: string;
+  communicationImpact: string;
+  howToImprove: string;
+}
+
+export interface ActionPlan {
+  nextSteps: string[];
+}
+
 export interface InterviewReport {
   interviewId: string;
   candidateName: string;
@@ -163,12 +217,20 @@ export interface InterviewReport {
   expressionGaps: string[];
   showKnowledgeVsExpressionInsight: boolean;
   insightMessage?: string;
+  knowledgeVsExpressionInsight?: KnowledgeVsExpressionInsight;
   misconceptionsFound: MisconceptionItem[];
+  misconceptionInsights?: MisconceptionInsight[];
   profileDivergenceNotes: string[];
   transferAbility: string;
   interviewMode?: string;
   jdRequirementCoverage?: any[];
   refinementDiffs: RefinementDiff[];
+  coachedAnswers?: CoachedAnswer[];
   personalPlaybookFormulas: Record<string, string>[];
+  isFirstTimeCandidate?: boolean;
+  growthSummary?: GrowthItem[];
+  whatChangedSinceLastInterview?: ProgressChangeItem[];
+  persistentGapInsights?: PersistentGapInsight[];
+  actionPlan?: ActionPlan;
   summaryFeedback: string;
 }

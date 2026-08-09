@@ -19,11 +19,12 @@ class InterviewPlanner:
         curriculum: Curriculum,
         selected_topics: List[str] = [],
         target_role: Optional[str] = None,
-        job_description: Optional[str] = None
+        job_description: Optional[str] = None,
+        memory_context: Optional[Any] = None
     ) -> Tuple[Dict[str, TopicAssessment], List[str], str, str, int]:
         """
         Builds initial TopicAssessment map, global pendingEvidence list, and starting topic & day.
-        Respects custom selected topics, target role, and JD requirements.
+        Respects custom selected topics, target role, JD requirements, and longitudinal candidate memory.
         """
         topics_map: Dict[str, TopicAssessment] = {}
         global_pending_evidence: List[str] = []
@@ -43,8 +44,10 @@ class InterviewPlanner:
         if not active_topic_names:
             active_topic_names = ["Operating Systems", "DBMS", "Computer Networks", "Software Architecture"]
 
-        # 2. Build TopicAssessment objects mapped across days
-        completed_day_ids = {m.day_id for m in candidate.completed_missions} if candidate else set()
+        # 2. Check longitudinal memory for recurring gaps or previous levels
+        historical_gaps = []
+        if memory_context and hasattr(memory_context, 'recurring_gaps'):
+            historical_gaps = [g.topic for g in memory_context.recurring_gaps]
 
         for idx, topic_name in enumerate(active_topic_names):
             day_num = (idx % 5) + 1
@@ -52,7 +55,13 @@ class InterviewPlanner:
             topic_id = cls._slugify(topic_name)
 
             status = TopicStatus.NOT_STARTED
-            initial_depth = 2 if day_id in completed_day_ids else 1
+            initial_depth = 1
+
+            # Adjust depth baseline if candidate demonstrated higher level in past memory
+            if memory_context and hasattr(memory_context, 'demonstrated_strengths'):
+                for str_item in memory_context.demonstrated_strengths:
+                    if str_item.topic.lower() in topic_name.lower() and str_item.level:
+                        initial_depth = min(3, str_item.level)
 
             pending_items = [
                 f"{topic_name} fundamentals and core architecture",
@@ -81,8 +90,14 @@ class InterviewPlanner:
                 misconceptions=[]
             )
 
-        # 3. Select initial starting topic
+        # 3. Select initial starting topic (prioritize recurring historical gap if present in active topics)
         first_topic_id = list(topics_map.keys())[0]
+        if historical_gaps:
+            for tid, tass in topics_map.items():
+                if any(gap.lower() in tass.topic_name.lower() for gap in historical_gaps):
+                    first_topic_id = tid
+                    break
+
         first_topic = topics_map[first_topic_id]
         
         return topics_map, global_pending_evidence, first_topic_id, first_topic.day_id, first_topic.depth

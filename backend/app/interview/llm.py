@@ -84,7 +84,7 @@ class LLMService:
 
         # 2. Check for Misconception Triggers
         misconception_found = []
-        if "eliminate" in ans_clean and ("hallucination" in ans_clean or "error" in ans_clean):
+        if ("eliminat" in ans_clean and "hallucinat" in ans_clean) or "replaces model weight" in ans_clean:
             misconception_found.append("Believes RAG completely eliminates hallucinations")
         elif "pgvector" in ans_clean and "no memory" in ans_clean:
             misconception_found.append("Believes vector search requires no RAM caching")
@@ -110,26 +110,26 @@ class LLMService:
                 recommendedReasonCode="misconception_flagged"
             )
 
-        # 3. High Knowledge / Low Expression Scenario
-        if "basically" in ans_clean or "some documents" in ans_clean or "kind of" in ans_clean:
+        # 3. High Knowledge / Low Expression or Informal Vague Phrasing Scenario
+        if "basically" in ans_clean or "some documents" in ans_clean or "kind of" in ans_clean or "it just" in ans_clean or "compares numbers" in ans_clean or (len(ans_clean) < 35 and not any(kw in ans_clean for kw in ["cosine", "bm25", "hnsw", "vector", "page", "acid", "tcp"])):
             return AnswerEvaluation(
-                technicalCorrectness=0.88,
-                conceptualDepth=0.82,
-                relevance=0.85,
-                reasoning=0.80,
-                application=0.82,
-                expressionClarity=0.45,
-                answerStructure=0.40,
-                confidenceOfAssessment=0.88,
-                strengths=["High underlying technical concept comprehension"],
-                missingConcepts=[],
+                technicalCorrectness=0.55,
+                conceptualDepth=0.50,
+                relevance=0.70,
+                reasoning=0.50,
+                application=0.50,
+                expressionClarity=0.40,
+                answerStructure=0.35,
+                confidenceOfAssessment=0.80,
+                strengths=["Basic conceptual attempt"],
+                missingConcepts=["Formal technical definition and mechanisms"],
                 misconceptions=[],
-                expressionIssues=["Unstructured answer opening", "Casual language phrasing"],
-                evidence=["Demonstrated sound conceptual knowledge despite informal phrasing"],
+                expressionIssues=["Unstructured answer opening", "Vague phrasing"],
+                evidence=["Demonstrated informal concept attempt"],
                 isStrugglingOrDontKnow=False,
                 isExpressionUnclear=True,
                 recommendedNextAction=AdaptiveAction.EXPRESSION_SCAFFOLD,
-                recommendedReasonCode="high_knowledge_unclear_expression"
+                recommendedReasonCode="vague_informal_expression"
             )
 
         # 4. Deep technical answer
@@ -178,6 +178,46 @@ class LLMService:
             recommendedReasonCode="moderate_understanding"
         )
 
+    @staticmethod
+    def _extract_grounded_connection(previous_answer: Optional[str]) -> Optional[str]:
+        if not previous_answer or len(previous_answer.strip()) < 5:
+            return None
+        ans = previous_answer.strip()
+        ans_lower = ans.lower()
+        
+        key_terms = [
+            ("direction", "how vector similarity compares vector direction"),
+            ("cosine", "cosine similarity comparing vector angles"),
+            ("vector", "representing information in high-dimensional vector space"),
+            ("embedding", "text embedding representations"),
+            ("distance", "vector distance calculation"),
+            ("hnsw", "HNSW approximate nearest neighbor search"),
+            ("bm25", "BM25 keyword search"),
+            ("chunk", "document chunking boundaries"),
+            ("rerank", "cross-encoder reranking"),
+            ("page", "virtual memory page translation"),
+            ("process", "process memory isolation"),
+            ("thread", "thread execution"),
+            ("acid", "ACID transaction guarantees"),
+            ("isolation", "transaction isolation levels"),
+            ("rollback", "ROLLBACK behavior"),
+            ("autowired", "Spring @Autowired dependency injection"),
+            ("heap", "JVM heap vs stack memory"),
+            ("tcp", "TCP 3-way handshake"),
+            ("virtual dom", "React Virtual DOM diffing"),
+            ("gil", "Python GIL execution limits"),
+            ("docker", "Docker container kernel sharing"),
+            ("rebase", "Git rebase linear history")
+        ]
+        for kw, phrase in key_terms:
+            if kw in ans_lower:
+                return phrase
+
+        first_clause = ans.split('.')[0].strip()
+        if len(first_clause) > 40:
+            first_clause = first_clause[:40] + "..."
+        return f"'{first_clause}'"
+
     def _mock_generate_question_text(
         self,
         action: AdaptiveAction,
@@ -193,8 +233,13 @@ class LLMService:
         act_val = action.value if hasattr(action, 'value') else str(action)
         act_str = str(act_val).upper()
 
+        grounded_connection = self._extract_grounded_connection(previous_answer)
+        grounded_prefix = f"You mentioned {grounded_connection}. " if grounded_connection else ""
+
         # Subject-Specific Tailored Action Reframings
         if act_str == "RECOVER":
+            if "vector" in topic_lower or "similarity" in topic_lower or "embeddings" in topic_lower:
+                return "That's completely fine. Think about what vector similarity measures at a fundamental level: does cosine similarity care more about the direction of a vector or its magnitude?"
             if "operating systems" in topic_lower or "os" in topic_lower:
                 return "Let's simplify process isolation: If a process tries to access memory outside its allocated bounds, how does an OS Segmentation Fault prevent memory corruption across processes?"
             if "dbms" in topic_lower or "database" in topic_lower or "sql" in topic_lower:
@@ -214,37 +259,43 @@ class LLMService:
             return f"Let's simplify {topic_name}: At a fundamental level, what is the core input and expected output when using {topic_name} in a backend application?"
 
         if act_str == "EXPRESSION_SCAFFOLD":
+            if "vector" in topic_lower or "similarity" in topic_lower:
+                return f"{grounded_prefix}Try structuring your response formally into three parts: 1) What vector spaces represent, 2) How cosine similarity measures direction vs magnitude, and 3) Practical semantic search trade-offs."
             if "operating systems" in topic_lower or "os" in topic_lower:
-                return "You clearly understand process memory. Try explaining it formally in three parts: 1) What virtual memory is, 2) How page tables translate virtual to physical addresses, and 3) Why this enforces isolation."
+                return f"{grounded_prefix}Try explaining it formally in three parts: 1) What virtual memory is, 2) How page tables translate virtual to physical addresses, and 3) Why this enforces isolation."
             if "dbms" in topic_lower or "database" in topic_lower or "sql" in topic_lower:
-                return "You understand transaction safety. Structure your response into: 1) The definition of ACID properties, 2) How isolation levels prevent dirty reads, and 3) The trade-off between isolation and throughput."
+                return f"{grounded_prefix}Structure your response into: 1) The definition of ACID properties, 2) How isolation levels prevent dirty reads, and 3) The trade-off between isolation and throughput."
             if "spring" in topic_lower or "boot" in topic_lower:
-                return "You understand Spring's core benefit. Phrasing it for a senior technical interview: 1) Define Dependency Injection, 2) Explain how the ApplicationContext manages bean lifecycles, and 3) Give an example using @Component."
+                return f"{grounded_prefix}Phrasing it for a senior technical interview: 1) Define Dependency Injection, 2) Explain how the ApplicationContext manages bean lifecycles, and 3) Give an example using @Component."
             if "java" in topic_lower:
-                return "You understand Java memory layout. Present it cleanly: 1) Heap vs Stack allocation, 2) How the Garbage Collector identifies unreferenced objects, and 3) How volatile guarantees visibility."
+                return f"{grounded_prefix}Present it cleanly: 1) Heap vs Stack allocation, 2) How the Garbage Collector identifies unreferenced objects, and 3) How volatile guarantees visibility."
             if "networks" in topic_lower:
-                return "You understand network protocols. Structure your answer: 1) Purpose of the TCP 3-way handshake, 2) How sequence numbers are synchronized, and 3) How HTTP/2 multiplexing improves over HTTP/1.1."
+                return f"{grounded_prefix}Structure your answer: 1) Purpose of the TCP 3-way handshake, 2) How sequence numbers are synchronized, and 3) How HTTP/2 multiplexing improves over HTTP/1.1."
             if "react" in topic_lower:
-                return "You understand React state. Structure your explanation: 1) What the Virtual DOM is, 2) How the Fiber reconciler computes diffs, and 3) How useMemo avoids redundant calculations."
-            return f"You have sound conceptual understanding of {topic_name}. Structure your response in three parts: 1) High-level definition, 2) Primary mechanism, and 3) Production trade-off."
+                return f"{grounded_prefix}Structure your explanation: 1) What the Virtual DOM is, 2) How the Fiber reconciler computes diffs, and 3) How useMemo avoids redundant calculations."
+            return f"{grounded_prefix}Structure your response in three parts: 1) High-level definition, 2) Primary mechanism, and 3) Production trade-off."
 
         if act_str == "PROBE":
+            if "vector" in topic_lower or "similarity" in topic_lower or "rag" in topic_lower:
+                return f"{grounded_prefix}Suppose your semantic search system returns irrelevant documents even though cosine similarity scores are high—why can hallucinations or false-positive matches still occur, and what would you investigate first?"
             if "operating systems" in topic_lower or "os" in topic_lower:
-                return "You mentioned process memory isolation. Suppose two threads within the SAME process modify a shared global counter simultaneously without locks—what race condition occurs, and how do mutexes fix it?"
+                return f"{grounded_prefix}Suppose two threads within the SAME process modify a shared global counter simultaneously without locks—what race condition occurs, and how do mutexes fix it?"
             if "dbms" in topic_lower or "database" in topic_lower or "sql" in topic_lower:
-                return "You mentioned ACID isolation. Suppose two transactions execute under Read Committed isolation simultaneously—why can phantom reads still occur, and how does Serializable isolation prevent them?"
+                return f"{grounded_prefix}Suppose two transactions execute under Read Committed isolation simultaneously—why can phantom reads still occur, and how does Serializable isolation prevent them?"
             if "spring" in topic_lower or "boot" in topic_lower:
-                return "You mentioned Spring Bean creation. What happens if Bean A autowires Bean B, and Bean B autowires Bean A—how does Spring detect circular dependencies, and how do @Lazy or setter injection resolve it?"
+                return f"{grounded_prefix}What happens if Bean A autowires Bean B, and Bean B autowires Bean A—how does Spring detect circular dependencies, and how do @Lazy or setter injection resolve it?"
             if "java" in topic_lower:
-                return "You mentioned JVM Garbage Collection. If a long-running application holds static references to unused objects, will G1GC reclaim that memory—or will it trigger an OutOfMemoryError?"
+                return f"{grounded_prefix}If a long-running application holds static references to unused objects, will G1GC reclaim that memory—or will it trigger an OutOfMemoryError?"
             if "networks" in topic_lower:
-                return "You mentioned TCP reliability. If a packet is lost in transit during a high-speed file transfer, how does TCP retransmission timeout (RTO) and fast retransmit repair the missing segment?"
+                return f"{grounded_prefix}If a packet is lost in transit during a high-speed file transfer, how does TCP retransmission timeout (RTO) and fast retransmit repair the missing segment?"
             if "react" in topic_lower:
-                return "You mentioned component state. What happens if you call setState directly inside the main render body without useEffect—how does React handle or prevent infinite re-render loops?"
-            return f"You mentioned how {topic_name} works in normal operation. Suppose high traffic causes unexpected failure—what specific edge case or bottleneck occurs, and how do you mitigate it?"
+                return f"{grounded_prefix}What happens if you call setState directly inside the main render body without useEffect—how does React handle or prevent infinite re-render loops?"
+            return f"{grounded_prefix}Suppose high traffic causes unexpected failure—what specific edge case or bottleneck occurs, and how do you mitigate it?"
 
         if act_str == "TRANSFER":
             domain = transfer_domain or "High-Throughput Enterprise Architecture"
+            if "vector" in topic_lower or "similarity" in topic_lower:
+                return f"You've shown strong depth in Vector Spaces. Let's apply this: Imagine a Real-time Medical Knowledge Graph in {domain} searching 50 million clinical trial embeddings. How would you configure vector quantization, HNSW indexing, and reranking to guarantee sub-10ms search SLA?"
             if "operating systems" in topic_lower or "os" in topic_lower:
                 return f"You've shown strong depth in Operating Systems. Let's apply this: Imagine an ultra-low-latency Financial Trading Engine in {domain} processing 500,000 orders/sec. How would you configure CPU thread pinning (affinity), non-blocking lock-free queues, and kernel bypass?"
             if "dbms" in topic_lower or "database" in topic_lower or "sql" in topic_lower:
@@ -254,6 +305,57 @@ class LLMService:
             if "java" in topic_lower:
                 return f"You've shown strong depth in Core Java. Let's apply this: Imagine a Cybersecurity Log Analyzer in {domain} scanning 10GB/sec of logs. How would you leverage Java Memory-Mapped Files (ByteBuffer), Virtual Threads, and zero-copy parsing?"
             return f"You've shown strong depth in {topic_name}. Let's apply this to a real-world enterprise scenario in {domain}: How would you integrate {topic_name} to guarantee 99.99% uptime and fault tolerance?"
+
+        # ---------------------------------------------------------------------
+        # TOPIC & DEPTH-SPECIFIC TAILORED QUESTIONS (Answer-Grounded & Depth Ladder)
+        # ---------------------------------------------------------------------
+        if "hnsw" in topic_lower or "indexing" in topic_lower:
+            if target_depth >= 5:
+                return f"{grounded_prefix}Production System Design in Vector Indexing: How would you architect an HNSW index with dynamic vector insertions and memory quantization?"
+            elif target_depth == 4:
+                return f"{grounded_prefix}Engineering deep-dive into Vector Indexing: How do graph degree parameters (M) and construction depth (ef_construction) impact HNSW recall vs memory usage?"
+            elif target_depth == 3:
+                return f"{grounded_prefix}How does HNSW multi-layer graph search compare to inverted file indexing (IVF) in terms of latency and indexing throughput?"
+            elif target_depth == 2:
+                return f"{grounded_prefix}Why does HNSW construct a multi-layer skip-list graph structure for approximate nearest neighbor search?"
+            else:
+                return "Understanding Vector Indexing & HNSW: How would you explain HNSW graph indexing vs flat vector search to an engineering teammate?"
+
+        if "chunking" in topic_lower or "retrieval" in topic_lower:
+            if target_depth >= 5:
+                return f"{grounded_prefix}Production System Design in Hybrid Retrieval: How would you design a multi-tenant retrieval architecture with BM25 + vector reciprocal rank fusion?"
+            elif target_depth == 4:
+                return f"{grounded_prefix}Engineering deep-dive into Document Chunking: How do fixed-size, sentence-window, and semantic boundary chunking strategies impact context retrieval precision?"
+            elif target_depth == 3:
+                return f"{grounded_prefix}Why is hybrid search (combining BM25 lexical search with dense vector search) essential for domain-specific technical jargon?"
+            elif target_depth == 2:
+                return f"{grounded_prefix}How do sliding window overlaps in document chunking prevent losing critical context across chunk boundaries?"
+            else:
+                return "Understanding Document Chunking & Hybrid Retrieval: How would you explain document chunking and hybrid lexical+vector retrieval to an engineering teammate?"
+
+        if "hallucination" in topic_lower or "rerank" in topic_lower:
+            if target_depth >= 5:
+                return f"{grounded_prefix}Production System Design in RAG Reliability: How would you architect real-time hallucination evaluation and fallback guardrails?"
+            elif target_depth == 4:
+                return f"{grounded_prefix}Engineering deep-dive into Reranking: How do cross-encoder rerankers differ from bi-encoder embeddings in scoring query-document relevance?"
+            elif target_depth == 3:
+                return f"{grounded_prefix}Suppose your vector search returns 20 candidate chunks—how does cross-encoder reranking eliminate false positives?"
+            elif target_depth == 2:
+                return f"{grounded_prefix}Why do cross-encoder rerankers provide higher relevance accuracy than vector cosine similarity alone?"
+            else:
+                return "Understanding RAG Hallucination & Reranking: How would you explain cross-encoder reranking and hallucination mitigation to an engineering teammate?"
+
+        if "vector" in topic_lower or "similarity" in topic_lower:
+            if target_depth >= 5:
+                return f"{grounded_prefix}Production System Design in Vector Search: How would you architect a distributed vector database handling 100M vectors with sub-10ms search SLA, dynamic index updates, and replication?"
+            elif target_depth == 4:
+                return f"{grounded_prefix}Engineering deep-dive into Vector Indexing & HNSW: How would you construct a production RAG search pipeline combining BM25 lexical retrieval with HNSW vector indexing for 10 million document chunks?"
+            elif target_depth == 3:
+                return f"{grounded_prefix}Suppose your semantic search engine returns irrelevant documents even though cosine similarity scores are high—what would you investigate first (e.g. embedding model drift, tokenization limits, or document chunking)?"
+            elif target_depth == 2:
+                return f"{grounded_prefix}Why is direction-based cosine similarity particularly useful for comparing text embeddings over Euclidean distance, and what happens if vector magnitudes differ significantly?"
+            else:
+                return "Understanding Vector Spaces & Similarity Metrics: How would you explain the core mechanism and primary use cases of Vector Spaces & Similarity Metrics to an engineering teammate?"
 
         # ---------------------------------------------------------------------
         # TOPIC & DEPTH-SPECIFIC TAILORED QUESTIONS (Zero repetition across depth)

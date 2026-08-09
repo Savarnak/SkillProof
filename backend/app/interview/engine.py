@@ -8,7 +8,7 @@ from app.schemas.curriculum import Curriculum, Topic, CurriculumDay
 from app.schemas.candidate import Candidate
 from app.interview.schemas import (
     InterviewState, QuestionTurn, AnswerEvaluation, TopicAssessment,
-    AdaptiveAction, InterviewDecision, MisconceptionItem, SessionStatus, InterviewReport
+    AdaptiveAction, InterviewDecision, MisconceptionItem, SessionStatus, InterviewReport, TopicStatus
 )
 from app.interview.state import session_store
 from app.interview.planner import InterviewPlanner
@@ -17,6 +17,7 @@ from app.interview.question_generator import question_generator
 from app.interview.logger import interview_logger
 
 from app.interview.jd_analyzer import jd_analyzer
+from app.memory.service import candidate_memory_service
 
 class InterviewEngine:
     """Core Orchestrator for SkillProof Adaptive AI Technical Interviewer Engine."""
@@ -124,13 +125,22 @@ class InterviewEngine:
         if not curriculum:
             raise ValueError("Curriculum data unavailable")
 
+        # Retrieve longitudinal candidate memory
+        memory_ctx = candidate_memory_service.get_relevant_context(
+            candidate_id=candidate.candidate_id,
+            selected_topics=state.selectedTopics,
+            target_role=state.targetRole,
+            job_description=state.jobDescription
+        )
+
         # Create initial plan & pending evidence list
         topics_map, global_pending_ev, start_topic_id, start_day_id, start_depth = InterviewPlanner.create_initial_plan(
             candidate=candidate,
             curriculum=curriculum,
             selected_topics=state.selectedTopics,
             target_role=state.targetRole,
-            job_description=state.jobDescription
+            job_description=state.jobDescription,
+            memory_context=memory_ctx
         )
 
         start_topic_obj = topics_map[start_topic_id]
@@ -147,6 +157,12 @@ class InterviewEngine:
             candidate=candidate,
             pending_evidence_item=pending_item
         )
+
+        # Memory-Aware Opening if previous historical interviews exist
+        if memory_ctx.total_previous_interviews > 0 and memory_ctx.recurring_gaps:
+            gap_topic = memory_ctx.recurring_gaps[0].topic
+            if gap_topic.lower() in start_topic.name.lower():
+                q_text = f"Welcome back. In a previous session, we explored {gap_topic} and noted an area to gather deeper practical evidence. Let's start there: {q_text}"
 
         # Update State
         state.interviewStatus = SessionStatus.IN_PROGRESS
@@ -268,13 +284,7 @@ class InterviewEngine:
         # 3. Decide Next Action & Target Topic
         misconception_flagged = len(eval_result.misconceptions) > 0
         
-        session_topics: List[Tuple[CurriculumDay, Topic]] = []
-        for tid, tass in state.topicsAssessed.items():
-            day_obj = CurriculumDay(day_id=tass.day_id, day_number=tass.day_number, title=f"Day {tass.day_number}: {tass.topic_name}", topics=[])
-            topic_obj = Topic(topic_id=tass.topic_id, name=tass.topic_name, description=f"Core concepts of {tass.topic_name}", learning_objectives=tass.pending_evidence_list)
-            session_topics.append((day_obj, topic_obj))
-
-        all_topics = session_topics if session_topics else self.get_all_topics()
+        all_topics = self.get_all_topics()
 
         next_action, next_topic_id, next_depth, reason_code, pending_item = question_generator.decide_next_action(
             eval_result_action=eval_result.recommendedNextAction,
@@ -296,6 +306,23 @@ class InterviewEngine:
             next_topic = Topic(topic_id=tass.topic_id, name=tass.topic_name, description=f"Core concepts of {tass.topic_name}", learning_objectives=tass.pending_evidence_list)
         else:
             next_day, next_topic = self._find_topic_and_day(next_topic_id)
+            state.topicsAssessed[next_topic_id] = TopicAssessment(
+                topic_id=next_topic_id,
+                topic_name=next_topic.name,
+                day_id=next_day.day_id,
+                day_number=next_day.day_number,
+                depth=next_depth,
+                knowledge=0.0,
+                expression=0.0,
+                application=0.0,
+                knowledge_confidence=0.5,
+                expression_confidence=0.5,
+                status=TopicStatus.NEEDS_MORE_EVIDENCE,
+                evidence=[],
+                pending_evidence_list=next_topic.learning_objectives or [f"Demonstrate understanding of {next_topic.name}"],
+                misconceptions=[],
+                expression_recovery_used=False
+            )
 
         # Update covered days list
         if next_day.day_number not in state.curriculumDaysCovered:
@@ -303,7 +330,10 @@ class InterviewEngine:
         if next_day.day_id not in state.coveredDayIds:
             state.coveredDayIds.append(next_day.day_id)
 
-        # Re-check completion criteria after day tracking
+        # Increment answered question count for completed turn
+        state.questionCount += 1
+
+        # Re-check completion criteria after day tracking & question count update
         state.canConclude = (
             (state.questionCount >= state.minQuestions and len(state.curriculumDaysCovered) >= state.minCurriculumDays) or
             state.questionCount >= state.maxQuestions
@@ -329,6 +359,9 @@ class InterviewEngine:
 
         # 4. Generate Next Question
         asked_q_texts = [t.question_text for t in state.conversationHistory]
+        prev_t_assessment = state.topicsAssessed.get(current_turn.topic_id)
+        prev_topic_name = prev_t_assessment.topic_name if prev_t_assessment else current_turn.topic_id
+
         next_question_text, decision = question_generator.generate_question(
             action=next_action,
             topic=next_topic,
@@ -337,14 +370,14 @@ class InterviewEngine:
             candidate=candidate,
             pending_evidence_item=pending_item,
             previous_answer=candidate_answer,
-            asked_questions=asked_q_texts
+            asked_questions=asked_q_texts,
+            previous_topic_name=prev_topic_name
         )
 
         state.currentTopic = next_topic_id
         state.currentDayId = next_day.day_id
         state.currentDepth = next_depth
         next_turn_index = state.questionCount + 1
-        state.questionCount = next_turn_index
 
         next_turn = QuestionTurn(
             turn_index=next_turn_index,
@@ -391,6 +424,21 @@ class InterviewEngine:
         if has_mandatory_coverage:
             state.interviewStatus = SessionStatus.COMPLETED
             state.completionReason = "mandatory_coverage_reached"
+            
+            # Store longitudinal candidate memory
+            cand_obj = self._candidates_cache.get(state.candidateId) or Candidate(
+                candidate_id=state.candidateId,
+                name="Candidate",
+                email="candidate@skillproof.internal",
+                is_synthetic_demo=False,
+                background_summary="",
+                target_role=state.targetRole or "Software Engineer",
+                completed_missions=[]
+            )
+            try:
+                candidate_memory_service.store_interview_memories(state, cand_obj)
+            except Exception as e:
+                interview_logger.log_event("MEMORY_UNAVAILABLE", session_id, {"error": str(e)})
         elif state.questionCount >= state.maxQuestions:
             state.interviewStatus = SessionStatus.INITIALIZED  # Marked incomplete
             state.completionReason = "mandatory_coverage_not_reached"

@@ -92,42 +92,55 @@ class QuestionGenerator:
                 pending_item
             )
 
-        # 5. If topic has sufficient evidence or depth >= 2, switch to an uncovered curriculum day / topic
-        if len(current_topic_assessment.evidence) >= 1 or current_topic_assessment.depth >= 2:
-            # First priority: find a topic whose day_number is NOT in covered_days_list yet
+        # 5. Check if mandatory 4-day coverage requires exploring an uncovered curriculum day
+        # We need at least 4 curriculum days by Question 8. If we are at Question 4+ and need more days:
+        needs_mandatory_coverage_switch = (
+            total_questions >= 4 and
+            covered_days_count < 4
+        )
+
+        topic_completed = (
+            current_topic_assessment.depth >= 4 or
+            len(current_topic_assessment.evidence) >= 2
+        )
+
+        if needs_mandatory_coverage_switch or topic_completed:
+            # Priority 1: Find topic from an uncovered curriculum day
             uncovered_day_topics = [
                 (d, t) for d, t in all_topics
                 if d.day_number not in covered_days_list and t.topic_id != current_topic_assessment.topic_id
             ]
             if uncovered_day_topics:
                 next_day, next_topic = uncovered_day_topics[0]
+                reason = f"switching_to_uncovered_day_{next_day.day_number}_for_mandatory_coverage" if needs_mandatory_coverage_switch else "completed_current_topic_advancing_curriculum"
                 return (
                     AdaptiveAction.CHANGE_TOPIC,
                     next_topic.topic_id,
-                    min(5, current_topic_assessment.depth + 1),
-                    f"switching_to_uncovered_day_{next_day.day_number}",
+                    1,
+                    reason,
                     pending_item
                 )
 
-            # Second priority: pick any topic that is NOT the current topic
+            # Priority 2: Pick any other topic not currently active
             other_topics = [(d, t) for d, t in all_topics if t.topic_id != current_topic_assessment.topic_id]
             if other_topics:
                 next_day, next_topic = other_topics[0]
                 return (
                     AdaptiveAction.CHANGE_TOPIC,
                     next_topic.topic_id,
-                    min(5, current_topic_assessment.depth + 1),
+                    1,
                     "switching_topic_balanced_coverage",
                     pending_item
                 )
 
-        # 6. Default: GO_DEEPER on current topic
+        # 6. Default: Advance Depth Ladder on Current Topic (Depth 1 -> 2 -> 3 -> 4 -> 5)
         next_depth = min(5, current_topic_assessment.depth + 1)
+        reason_code = f"candidate_demonstrated_depth_{current_topic_assessment.depth}_advancing_to_depth_{next_depth}"
         return (
             AdaptiveAction.GO_DEEPER,
             current_topic_assessment.topic_id,
             next_depth,
-            "strong_fundamentals",
+            reason_code,
             pending_item
         )
 
@@ -141,7 +154,8 @@ class QuestionGenerator:
         candidate: Optional[Candidate] = None,
         pending_evidence_item: Optional[str] = None,
         previous_answer: Optional[str] = None,
-        asked_questions: Optional[List[str]] = None
+        asked_questions: Optional[List[str]] = None,
+        previous_topic_name: Optional[str] = None
     ) -> Tuple[str, InterviewDecision]:
         """Generates question text and constructs the structured InterviewDecision object."""
         scaffold_prompt = None
@@ -173,8 +187,8 @@ class QuestionGenerator:
             previous_answer=previous_answer
         )
 
-        # Prevent duplicate question texts in the same session
-        if asked_questions:
+        # Prevent duplicate question texts in the same session for GO_DEEPER actions
+        if asked_questions and action == AdaptiveAction.GO_DEEPER:
             current_try_depth = target_depth
             attempts = 0
             while question_text in asked_questions and attempts < 5:
@@ -190,6 +204,10 @@ class QuestionGenerator:
                     previous_answer=previous_answer
                 )
                 attempts += 1
+
+        # Format natural transition for CHANGE_TOPIC actions
+        if action == AdaptiveAction.CHANGE_TOPIC and previous_topic_name:
+            question_text = f"Your technical explanation of {previous_topic_name} is solid. Let's build on that and move into {topic.name}: {question_text}"
 
         decision = InterviewDecision(
             action=action,

@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ShieldCheck, Award, Brain, MessageSquare, Compass, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw, Lightbulb, UserCheck, HelpCircle, ArrowLeft, FileText } from "lucide-react";
+import {
+  ShieldCheck, Award, Brain, ArrowRight, AlertTriangle, CheckCircle2, RefreshCw, Lightbulb, UserCheck, HelpCircle, ArrowLeft, FileText, Target, Activity, Flame, Layers
+} from "lucide-react";
 import { getInterviewReport } from "../../../lib/api";
 import { InterviewReport } from "../../../types/interview";
 import EvidenceExpander from "../../../components/EvidenceExpander";
 import TopicEvidenceMap from "../../../components/TopicEvidenceMap";
+import GrowthProgressCard from "../../../components/GrowthProgressCard";
+import AnswerCoach from "../../../components/AnswerCoach";
+import MisconceptionReportCard from "../../../components/MisconceptionReportCard";
+import ActionPlanCard from "../../../components/ActionPlanCard";
 
 export default function ReportPage() {
   const params = useParams();
@@ -64,9 +70,11 @@ export default function ReportPage() {
   }
 
   const scores = report.weightedScores;
+  const kvInsight = report.knowledgeVsExpressionInsight;
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-between p-6 md:p-12 bg-gradient-to-b from-[#0b0f19] via-[#0f172a] to-[#0b0f19] text-slate-100">
+    <main className="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 md:p-12 bg-gradient-to-b from-[#0b0f19] via-[#0f172a] to-[#0b0f19] text-slate-100">
+      {/* Top Header Navigation */}
       <header className="w-full max-w-4xl flex items-center justify-between py-4 border-b border-slate-800/80">
         <button
           onClick={() => router.push("/")}
@@ -76,33 +84,29 @@ export default function ReportPage() {
           <span>Back to Home</span>
         </button>
 
-        <button
-          onClick={() => router.push(`/report/${interviewId}/answers`)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all"
-        >
-          <span>Answer Refinement & Playbook</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[11px] font-semibold">
+          Discovery Report
+        </span>
       </header>
 
-      <section className="w-full max-w-4xl my-8 space-y-8">
+      <section className="w-full max-w-4xl my-6 md:my-8 space-y-8">
         {/* Header Title */}
         <div className="space-y-2 text-left">
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
             YOUR TECHNICAL SNAPSHOT
           </span>
-          <h2 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight">
             Here&apos;s what you demonstrated, {report.candidateName}.
           </h2>
-          <p className="text-slate-400 text-sm">
+          <p className="text-slate-400 text-xs sm:text-sm">
             Evaluated across {report.totalQuestionsAsked} questions covering {report.uniqueDaysCovered} topics.
           </p>
         </div>
 
-        {/* Job Readiness Matrix if in JD Mode */}
+        {/* Job Description Readiness Matrix if present */}
         {report.jdRequirementCoverage && report.jdRequirementCoverage.length > 0 && (
-          <div className="p-6 md:p-8 rounded-3xl glass-panel border border-indigo-500/30 text-left space-y-4">
-            <h3 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
+          <div className="p-5 sm:p-6 md:p-8 rounded-3xl glass-panel border border-indigo-500/30 text-left space-y-4">
+            <h3 className="text-xs sm:text-sm font-semibold text-indigo-300 flex items-center gap-2">
               <FileText className="w-4 h-4 text-indigo-400" />
               Job Description Readiness Matrix
             </h3>
@@ -127,69 +131,199 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* Overall Readiness & Weighted Score Matrix */}
-        <div className="p-6 md:p-8 rounded-3xl glass-panel border border-slate-800 space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 text-left">
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Overall Readiness Score</span>
-              <div className="text-4xl md:text-6xl font-extrabold text-indigo-400 font-mono mt-1">
-                {scores.overallReadiness} <span className="text-xl text-slate-500 font-normal">/ 100</span>
-              </div>
+        {/* 1. YOUR INTERVIEW PROFILE (Psychologically Supportive Progress Indicators) */}
+        <div className="p-5 sm:p-6 md:p-8 rounded-3xl glass-panel border border-slate-800 space-y-6 text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
+            <div className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-indigo-400" />
+                YOUR INTERVIEW PROFILE
+              </span>
+              <p className="text-xs text-slate-400">
+                Your technical understanding is stronger than your first responses suggested.
+              </p>
             </div>
-            <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-              Transparent weighted calculation: Knowledge (30%), Reasoning (20%), Application (20%), Expression (15%), Transfer (15%).
-            </p>
+
+            <div className="px-3.5 py-1.5 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 text-xs font-bold shrink-0 self-start sm:self-auto">
+              Overall Alignment: {scores.overallReadiness}%
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-left">
-            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-1">
-              <div className="text-[11px] text-slate-400 font-medium">Knowledge (30%)</div>
-              <div className="text-lg font-bold text-white font-mono">{Math.round(scores.technicalKnowledge * 100)}%</div>
+          <div className="space-y-4">
+            {/* Technical Knowledge */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white">Technical Knowledge</span>
+                <span className="font-mono text-indigo-300 font-bold">
+                  {Math.round(scores.technicalKnowledge * 100)}% ({scores.technicalKnowledge >= 0.75 ? "Strong" : scores.technicalKnowledge >= 0.50 ? "Demonstrated" : "Developing"})
+                </span>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-600 to-emerald-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(10, Math.round(scores.technicalKnowledge * 100))}%` }}
+                />
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-1">
-              <div className="text-[11px] text-slate-400 font-medium">Application (20%)</div>
-              <div className="text-lg font-bold text-white font-mono">{Math.round(scores.application * 100)}%</div>
+            {/* Application */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white">Application</span>
+                <span className="font-mono text-indigo-300 font-bold">
+                  {Math.round(scores.application * 100)}% ({scores.application >= 0.75 ? "Strong" : scores.application >= 0.50 ? "Demonstrated" : "Developing"})
+                </span>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-600 to-emerald-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(10, Math.round(scores.application * 100))}%` }}
+                />
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-1">
-              <div className="text-[11px] text-slate-400 font-medium">Expression (15%)</div>
-              <div className="text-lg font-bold text-white font-mono">{Math.round(scores.expression * 100)}%</div>
+            {/* Reasoning */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white">Reasoning</span>
+                <span className="font-mono text-indigo-300 font-bold">
+                  {Math.round(scores.reasoning * 100)}% ({scores.reasoning >= 0.75 ? "Strong" : scores.reasoning >= 0.50 ? "Demonstrated" : "Developing"})
+                </span>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-600 to-emerald-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(10, Math.round(scores.reasoning * 100))}%` }}
+                />
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-1">
-              <div className="text-[11px] text-slate-400 font-medium">Transfer (15%)</div>
-              <div className="text-lg font-bold text-white font-mono">{Math.round(scores.transfer * 100)}%</div>
+            {/* Technical Expression */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white">Technical Expression</span>
+                <span className="font-mono text-amber-300 font-bold">
+                  {Math.round(scores.expression * 100)}% ({scores.expression >= 0.75 ? "Strong" : scores.expression >= 0.50 ? "Demonstrated" : "Developing"})
+                </span>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-600 to-amber-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(10, Math.round(scores.expression * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Transfer Ability */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white">Transfer Ability</span>
+                <span className="font-mono text-indigo-300 font-bold">
+                  {Math.round(scores.transfer * 100)}% ({scores.transfer >= 0.75 ? "Strong" : scores.transfer >= 0.50 ? "Demonstrated" : "Developing"})
+                </span>
+              </div>
+              <div className="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-600 to-emerald-400 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(10, Math.round(scores.transfer * 100))}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* "You Know More Than You Showed" Insight Card */}
-        {report.showKnowledgeVsExpressionInsight && (
+        {/* 2. SPECIAL INSIGHT: "You Knew It But Didn't Show It Clearly" */}
+        {((report.showKnowledgeVsExpressionInsight && kvInsight?.show) || report.showKnowledgeVsExpressionInsight) && (
           <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-indigo-950/80 via-slate-900 to-slate-950 border border-indigo-500/30 space-y-3 text-left animate-fadeIn">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold">
               <Brain className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Assessment Insight</span>
+              <span>Key Observation</span>
             </div>
-            <h3 className="text-xl md:text-2xl font-bold text-white">You knew more than your first answer showed.</h3>
+            <h3 className="text-xl md:text-2xl font-bold text-white">
+              {kvInsight?.headline || "You knew it. You just didn't show it clearly."}
+            </h3>
             <p className="text-slate-300 text-sm leading-relaxed">
-              {report.insightMessage}
+              {kvInsight?.technicalDemonstrated || report.insightMessage}
             </p>
+            {kvInsight?.communicationImpact && (
+              <p className="text-slate-400 text-xs leading-relaxed">
+                <strong>Communication Impact:</strong> {kvInsight.communicationImpact}
+              </p>
+            )}
+            {kvInsight?.howToImprove && (
+              <div className="pt-2">
+                <span className="px-3 py-1.5 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-200 text-xs font-medium inline-block">
+                  💡 {kvInsight.howToImprove}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Topic Evidence Map */}
+        {/* 3. HERO FEATURE: ANSWER COACH */}
+        {report.coachedAnswers && report.coachedAnswers.length > 0 && (
+          <AnswerCoach coachedAnswers={report.coachedAnswers} />
+        )}
+
+        {/* 6. MISCONCEPTION REPORT */}
+        {report.misconceptionInsights && report.misconceptionInsights.length > 0 && (
+          <MisconceptionReportCard insights={report.misconceptionInsights} />
+        )}
+
+        {/* 7. YOUR GROWTH / MEMORY SECTION */}
+        <div className="space-y-4">
+          {report.isFirstTimeCandidate ? (
+            <div className="p-6 rounded-3xl glass-panel border border-slate-800 text-left space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-400">
+                <Flame className="w-4 h-4 text-indigo-400" />
+                <span>YOUR GROWTH</span>
+              </div>
+              <div className="text-sm font-semibold text-white">Baseline established</div>
+              <p className="text-xs text-slate-400">
+                This is your initial candidate assessment. SkillProof will track your longitudinal growth and skill progressions in future interviews.
+              </p>
+            </div>
+          ) : (
+            <GrowthProgressCard
+              growthSummary={report.growthSummary}
+              whatChangedSinceLastInterview={report.whatChangedSinceLastInterview}
+            />
+          )}
+        </div>
+
+        {/* 8. PERSISTENT GAP SECTION */}
+        {report.persistentGapInsights && report.persistentGapInsights.length > 0 && (
+          <div className="p-6 rounded-3xl glass-panel border border-amber-500/30 text-left space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              WORTH FOCUSING ON
+            </h3>
+            {report.persistentGapInsights.map((gap, idx) => (
+              <div key={idx} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+                <div className="font-semibold text-white">{gap.topic}</div>
+                <p className="text-slate-300">{gap.whyItMatters}</p>
+                <div className="text-amber-300 font-medium">What to practice: {gap.whatToPractice}</div>
+                <div className="text-indigo-300 font-mono text-[11px]">Suggested Challenge: {gap.suggestedNextChallenge}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 9. ACTION PLAN — YOUR NEXT 3 STEPS */}
+        <ActionPlanCard actionPlan={report.actionPlan} />
+
+        {/* Curriculum Topic Assessment Map */}
         <div className="space-y-4 text-left">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-indigo-400" />
             Curriculum Topic Assessment Map
           </h3>
           <TopicEvidenceMap expanders={report.topicEvidenceExpanders} />
         </div>
 
-        {/* Collapsible Evidence Expanders ("Why?") */}
+        {/* Detailed Evidence Expanders */}
         <div className="space-y-3 text-left">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
             <HelpCircle className="w-4 h-4 text-indigo-400" />
             Detailed Evidence Expanders (Click to inspect source questions)
           </h3>
@@ -207,99 +341,6 @@ export default function ReportPage() {
               />
             ))}
           </div>
-        </div>
-
-        {/* Candidate Profile Hypothesis vs Live Interview Evidence Verification */}
-        {report.profileDivergenceNotes.length > 0 && (
-          <div className="p-6 md:p-8 rounded-3xl glass-panel border border-indigo-500/30 text-left space-y-4">
-            <h3 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-indigo-400" />
-              Profile Signal vs Live Evidence Divergence
-            </h3>
-            <div className="space-y-2 text-xs">
-              {report.profileDivergenceNotes.map((note, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300">
-                  {note}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Demonstrated Strengths & Next Frontier */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-          <div className="p-6 rounded-3xl glass-panel border border-slate-800 space-y-4">
-            <h3 className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              Demonstrated Strengths
-            </h3>
-            <ul className="space-y-2 text-xs text-slate-300">
-              {report.demonstratedStrengths.map((str: string, idx: number) => (
-                <li key={idx} className="flex items-start gap-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-                  <span className="text-emerald-400 font-bold">•</span>
-                  <span>{str}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="p-6 rounded-3xl glass-panel border border-slate-800 space-y-4">
-            <h3 className="text-sm font-semibold text-indigo-400 flex items-center gap-2">
-              <Lightbulb className="w-4 h-4" />
-              Your Next Frontier
-            </h3>
-            <ul className="space-y-2 text-xs text-slate-300">
-              {report.knowledgeGaps.length > 0 ? (
-                report.knowledgeGaps.map((gap: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-2 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
-                    <span className="text-indigo-400 font-bold">•</span>
-                    <span>The interview did not provide sufficient evidence of {gap}</span>
-                  </li>
-                ))
-              ) : (
-                <li className="text-slate-400 italic">No critical conceptual gaps flagged. Continue practicing system design scaling.</li>
-              )}
-            </ul>
-          </div>
-        </div>
-
-        {/* Misconception Tracker Card */}
-        {report.misconceptionsFound.length > 0 && (
-          <div className="p-6 md:p-8 rounded-3xl bg-amber-950/20 border border-amber-500/30 text-left space-y-4">
-            <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              Concept Worth Revisiting
-            </h3>
-            {report.misconceptionsFound.map((misc: any, idx: number) => (
-              <div key={idx} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
-                <div className="text-slate-400">Topic: <strong className="text-slate-200">{misc.topic}</strong></div>
-                <div className="text-amber-200 font-medium">&ldquo;{misc.misconception}&rdquo;</div>
-                <div className="text-emerald-400 font-semibold">
-                  Status: {misc.status.toUpperCase()} (Challenged and probed during interview)
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Cross-Domain Transfer Result */}
-        <div className="p-6 rounded-3xl glass-panel border border-slate-800 text-left space-y-3">
-          <h3 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
-            <Compass className="w-4 h-4 text-indigo-400" />
-            Cross-Domain Concept Transfer
-          </h3>
-          <p className="text-xs text-slate-300 leading-relaxed">{report.transferAbility}</p>
-        </div>
-
-        {/* Bottom CTA to Answer Refinement Page */}
-        <div className="pt-4 text-center">
-          <button
-            onClick={() => router.push(`/report/${interviewId}/answers`)}
-            className="w-full md:w-auto py-4 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-base inline-flex items-center justify-center gap-3 shadow-xl shadow-indigo-600/25 transition-all"
-          >
-            <span>Explore Answer Refinement & Coaching</span>
-            <ArrowRight className="w-5 h-5" />
-          </button>
         </div>
       </section>
 
