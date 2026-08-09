@@ -38,7 +38,7 @@ def read_root():
 
 @app.get("/api/health")
 def health_check():
-    """Mandatory health check endpoint verifying engine status and sample data availability."""
+    """Mandatory health check endpoint verifying engine status and backend/data sample data availability."""
     from app.data_loader import load_sample_curriculum, load_sample_candidates
     
     cdata, curr_file, curriculum_ok = load_sample_curriculum()

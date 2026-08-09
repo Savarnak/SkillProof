@@ -1,10 +1,13 @@
 import { InterviewState, InterviewReport } from "../types/interview";
 
+// Compositional API Base URL resolution:
+// In production on Vercel: defaults to "" (same-origin relative /api calls)
+// In local dev browser: defaults to "http://localhost:8000" if NEXT_PUBLIC_API_URL is unset
 const getApiBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
     return process.env.NEXT_PUBLIC_API_URL;
   }
-  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+  if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && process.env.NODE_ENV === "development") {
     return "http://localhost:8000";
   }
   return "";

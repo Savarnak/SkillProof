@@ -32,7 +32,7 @@ class InterviewEngine:
         self._load_demo_data()
 
     def _load_demo_data(self):
-        """Loads sample curriculum and candidates from authoritative backend/data/ location."""
+        """Loads sample curriculum and candidates strictly from backend/data/ package directory."""
         from app.data_loader import load_sample_curriculum, load_sample_candidates
         
         cdata, curr_file, curr_ok = load_sample_curriculum()
