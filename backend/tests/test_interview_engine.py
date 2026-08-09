@@ -169,6 +169,8 @@ def test_13_step_adaptive_interview_trace():
     ]
 
     for step_num, ans in enumerate(trace_script, start=1):
+        if state.interviewStatus == SessionStatus.COMPLETED:
+            break
         state, current_q = interview_engine.submit_answer(
             session_id=state.interviewId,
             candidate_answer=ans

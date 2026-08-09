@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 from app.interview.engine import interview_engine
 from app.interview.schemas import InterviewState, InterviewReport
@@ -10,6 +10,11 @@ router = APIRouter(prefix="/api/interview", tags=["interview"])
 class StartInterviewRequest(BaseModel):
     candidate_id: str = "cand_alex_rivers_001"
     curriculum_id: str = "curr_ai_eng_v1"
+    selected_topics: List[str] = Field(default_factory=list)
+    selected_categories: List[str] = Field(default_factory=list)
+    target_role: Optional[str] = None
+    job_description: Optional[str] = None
+    mode: str = "learning_journey"  # learning_journey or job_description
 
 class AnswerRequest(BaseModel):
     answer_text: str = Field(..., min_length=1)
@@ -28,7 +33,12 @@ def start_interview(req: StartInterviewRequest):
     try:
         state, first_question = interview_engine.start_interview(
             candidate_id=req.candidate_id,
-            curriculum_id=req.curriculum_id
+            curriculum_id=req.curriculum_id,
+            selected_topics=req.selected_topics,
+            selected_categories=req.selected_categories,
+            target_role=req.target_role,
+            job_description=req.job_description,
+            mode=req.mode
         )
         return StartInterviewResponse(state=state, current_question=first_question)
     except Exception as e:
@@ -68,11 +78,29 @@ def finish_interview(interview_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{interview_id}/report", response_model=InterviewReport)
+from app.report.generator import report_generator
+
+@router.get("/{interview_id}/report")
 def get_interview_report(interview_id: str):
     try:
-        report = interview_engine.generate_report(interview_id)
-        return report
+        state = interview_engine.session_store.get_session(interview_id)
+        if not state:
+            raise HTTPException(status_code=404, detail=f"Session '{interview_id}' not found")
+        
+        candidate = interview_engine._candidates_cache.get(
+            state.candidateId,
+            interview_engine._candidates_cache.get("cand_alex_rivers_001")
+        )
+        curr_title = interview_engine._curriculum_cache.title if interview_engine._curriculum_cache else "AI Systems"
+        
+        report_data = report_generator.generate_discovery_report(
+            state=state,
+            candidate=candidate,
+            curriculum_title=curr_title
+        )
+        return report_data
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:

@@ -130,7 +130,17 @@ class InterviewState(BaseModel):
     transferChallengesUsed: List[str] = Field(default_factory=list)
     profileVsEvidenceDivergence: List[str] = Field(default_factory=list)
     eventLogs: List[Dict[str, Any]] = Field(default_factory=list)
+    
+    # Extended Setup & JD Mode Fields
+    selectedTopics: List[str] = Field(default_factory=list)
+    selectedCategories: List[str] = Field(default_factory=list)
+    targetRole: Optional[str] = None
+    jobDescription: Optional[str] = None
+    interviewMode: str = "learning_journey"  # learning_journey or job_description
+    jdRequirementCoverage: List[Dict[str, Any]] = Field(default_factory=list)
+
     interviewStatus: SessionStatus = SessionStatus.INITIALIZED
+    completionReason: Optional[str] = None
     
     # Deterministic Rule Thresholds
     minQuestions: int = 8

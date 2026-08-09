@@ -55,3 +55,39 @@ This log documents the usage of AI tools during the development of SkillProof, f
 * **Human Rationale & Control**:
   - Established live interview evidence priority over candidate profile signals, ensuring candidate assumptions are treated as initial hypotheses verified or overridden by live evidence.
   - Separated technical knowledge scoring from expression scoring without making inferences on psychological state, accent, or emotional state.
+
+---
+
+### Entry 004 — Phase 5: Evidence Report Engine, Rule Enforcement Fix & Coaching
+* **Date**: 2026-08-09
+* **Phase**: 5 — Post-Interview Evidence Report, Rule Enforcement Fix & Coaching
+* **AI Tool Used**: Antigravity AI Coding Assistant (Gemini 3.6 Flash)
+* **Tasks Executed**:
+  1. Implemented authoritative completion rule fix (`backend/app/interview/engine.py`): sessions reaching `maxQuestions == 15` without mandatory coverage (8 questions & 4 curriculum days) are strictly flagged as `interviewStatus = "incomplete"` (`completionReason = "mandatory_coverage_not_reached"`) rather than falsely reporting a compliant completed interview.
+  2. Created dedicated Report Service Module (`backend/app/report/`) featuring `ReportAggregator` and `ReportGenerator` with a transparent score weighting strategy (Knowledge 30%, Reasoning 20%, Application 20%, Expression 15%, Transfer 15%).
+  3. Implemented Collapsible Topic Evidence Expanders ("Why?") linking scores directly to source questions (`Q2`, `Q5`, `Q9`) and quotes, while explicitly marking unassessed topics as `"Not Assessed"` rather than penalizing candidate with a 0 score.
+  4. Built Answer Refinement & Coaching engine (`/report/[id]/answers`) providing Before vs. After answer comparisons, structural diff callouts (`+ Direct opening`, `- Unnecessary repetition`), delivery coaching formulas, and personalized Technical Delivery Playbook formulas.
+  5. Created UI components (`EvidenceExpander.tsx`, `TopicEvidenceMap.tsx`, `DepthLadderVisualizer.tsx`) and polished candidate UI for 390px mobile responsiveness.
+  6. Built Phase 5 test suite (`backend/tests/test_report_engine.py`) verifying valid completion, incomplete status rule fix, evidence question linking, misconception lifecycles, and answer refinement diffs.
+* **Human Rationale & Control**:
+  - Fixed interview completion rule logic to prevent false-positive completions when max questions limit is reached.
+  - Ensured all report insights and score breakdowns are strictly evidence-backed without fabricating psychological or emotional conclusions.
+
+---
+
+### Entry 005 — Refinements: Setup, Flexible Category Selection, Job Description Analyzer & Navigation
+* **Date**: 2026-08-09
+* **Phase**: Refinements — Flexible Topic Selection, JD Analyzer, & Navigation Safety
+* **AI Tool Used**: Antigravity AI Coding Assistant (Gemini 3.6 Flash)
+* **Tasks Executed**:
+  1. Replaced rigid 3-persona selection with flexible setup experience ("What do you want to be challenged on?"). Built `CategorySelector.tsx` featuring 4 expandable category accordions (Core CS, Frameworks & Development, Technical / Emerging Tech, Programming Languages) and Target Role selection.
+  2. Added "Interview me for a specific job" tab featuring `JobDescriptionInput.tsx` for pasting Job Descriptions. Built Job Description Analyzer (`backend/app/interview/jd_analyzer.py`) extracting required skills, languages, frameworks, cloud tools, databases, and roles, and tracking JD requirement coverage (`✓ Strong`, `✓ Demonstrated`, `△ Developing`, `○ Not assessed`).
+  3. Displayed **Job Description Readiness Matrix** on discovery report (`/report/[id]`) when operating in JD mode.
+  4. Removed artificial `Day 1 -> Day 2 -> Day 3` increment badges from the active interview header (`JourneyTracker.tsx`), replacing them with actual topic/concept exploration context (`Exploring: Spring Boot → Dependency Injection`).
+  5. Implemented navigation safety controls (`LeaveInterviewModal.tsx`): added `← Back to Home` links on report pages and confirmation modal when navigating away from active interviews (`"Leave this interview? Progress will be saved."`).
+  6. Added `"Continue where you left off"` recent session card on the landing page (`/`) for returning candidates.
+  7. Extended `StartInterviewRequest` schema maintaining 100% backward compatibility.
+  8. Created automated test suite (`backend/tests/test_jd_mode.py`) verifying JD skill extraction, JD mode session initialization, and custom topic/role selection.
+* **Human Rationale & Control**:
+  - Preserved internal PS2 backend curriculum day tracking (`minQuestions = 8`, `minCurriculumDays = 4`) while correcting the candidate UI to present genuine topic context rather than artificial day increments.
+  - Supported both Learning Journey mode and Job Description mode without creating duplicate interview engines.

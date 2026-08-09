@@ -1,62 +1,174 @@
-export type SkillDepthLevel =
-  | 'Recognition'
-  | 'Understanding'
-  | 'Application'
-  | 'Engineering'
-  | 'System Design'
-  | 'Transfer';
+export type SkillDepthLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type AdaptiveAction =
-  | 'Go deeper'
-  | 'Probe missing concept'
-  | 'Rephrase'
-  | 'Recover/scaffold'
-  | 'Change topic'
-  | 'Cross-domain transfer';
+  | 'GO_DEEPER'
+  | 'PROBE'
+  | 'REPHRASE'
+  | 'RECOVER'
+  | 'EXPRESSION_SCAFFOLD'
+  | 'CHANGE_TOPIC'
+  | 'TRANSFER'
+  | 'END';
 
 export type SessionStatus = 'initialized' | 'in_progress' | 'completed';
+export type MisconceptionStatus = 'identified' | 'probed' | 'resolved' | 'persists';
 
-export interface SkillAssessment {
+export interface MisconceptionItem {
   topic: string;
+  misconception: string;
+  status: MisconceptionStatus;
+  detected_at_turn: number;
+  resolution_turn?: number;
+}
+
+export interface TopicAssessment {
+  topic_id: string;
+  topic_name: string;
+  day_id: string;
+  day_number: number;
   knowledge: number;
   expression: number;
   application: number;
-  depth_level: SkillDepthLevel;
+  depth: number;
+  status: string;
   evidence: string[];
+  pending_evidence_list: string[];
+  knowledge_confidence: number;
+  expression_confidence: number;
+  expression_recovery_used: boolean;
   misconceptions: string[];
 }
 
-export interface QuestionAnswerTurn {
-  turn_index: number;
-  day_id: string;
+export interface AnswerEvaluation {
+  technicalCorrectness: number;
+  conceptualDepth: number;
+  relevance: number;
+  reasoning: number;
+  application: number;
+  expressionClarity: number;
+  answerStructure: number;
+  confidenceOfAssessment: number;
+  strengths: string[];
+  missingConcepts: string[];
+  misconceptions: string[];
+  expressionIssues: string[];
+  evidence: string[];
+  isStrugglingOrDontKnow: boolean;
+  isExpressionUnclear: boolean;
+  recommendedNextAction: AdaptiveAction;
+  recommendedReasonCode: string;
+}
+
+export interface InterviewDecision {
+  action: AdaptiveAction;
   topic_id: string;
-  depth_level: SkillDepthLevel;
+  target_depth: number;
+  reasonCode: string;
+  scaffold_prompt?: string;
+  transfer_domain?: string;
+}
+
+export interface QuestionTurn {
+  turn_index: number;
+  question_id: string;
+  topic_id: string;
+  day_id: string;
+  day_number: number;
+  depth_level: number;
   question_text: string;
   candidate_answer?: string;
-  next_action?: AdaptiveAction;
-  scaffold_used?: string;
-  misconception_flagged?: string;
-  turn_analysis?: string;
+  evaluation?: AnswerEvaluation;
+  decision?: InterviewDecision;
+  timestamp: string;
 }
 
-export interface DeterministicState {
-  min_questions: number;
-  min_curriculum_days: number;
-  total_questions_asked: number;
-  covered_days: string[];
-  covered_topics: string[];
-  meets_completion_criteria: boolean;
-}
-
-export interface InterviewSession {
-  session_id: string;
-  candidate_id: string;
-  curriculum_id: string;
-  status: SessionStatus;
-  current_turn_index: number;
-  turns: QuestionAnswerTurn[];
-  assessments: Record<string, SkillAssessment>;
-  deterministic_state: DeterministicState;
+export interface InterviewState {
+  interviewId: string;
+  candidateId: string;
+  curriculumId: string;
+  questionCount: number;
+  curriculumDaysCovered: number[];
+  coveredDayIds: string[];
+  topicsAssessed: Record<string, TopicAssessment>;
+  currentTopic: string;
+  currentDayId: string;
+  currentDepth: number;
+  conversationHistory: QuestionTurn[];
+  skillEvidence: string[];
+  pendingEvidence: string[];
+  strengths: string[];
+  knowledgeGaps: string[];
+  expressionGaps: string[];
+  misconceptions: MisconceptionItem[];
+  transferChallengesUsed: string[];
+  profileVsEvidenceDivergence: string[];
+  selectedTopics?: string[];
+  selectedCategories?: string[];
+  targetRole?: string | null;
+  jobDescription?: string | null;
+  interviewMode?: string;
+  jdRequirementCoverage?: any[];
+  interviewStatus: SessionStatus;
+  completionReason?: string;
+  minQuestions: number;
+  minCurriculumDays: number;
+  maxQuestions: number;
+  canConclude: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface WeightedScoreBreakdown {
+  technicalKnowledge: number;
+  reasoning: number;
+  application: number;
+  expression: number;
+  transfer: number;
+  overallReadiness: number;
+}
+
+export interface TopicEvidenceExpander {
+  topic_id: string;
+  topic_name: string;
+  score: number;
+  confidence: number;
+  evidenceCount: number;
+  sourceQuestions: number[];
+  evidenceQuotes: string[];
+  statusTag: string;
+}
+
+export interface RefinementDiff {
+  questionIndex: number;
+  questionText: string;
+  originalAnswer: string;
+  interviewReadyVersion: string;
+  diffAdditions: string[];
+  diffDeletions: string[];
+  deliveryFormula: string;
+  whatWasGood: string;
+  whatCouldImprove: string;
+}
+
+export interface InterviewReport {
+  interviewId: string;
+  candidateName: string;
+  curriculumTitle: string;
+  totalQuestionsAsked: number;
+  uniqueDaysCovered: number;
+  weightedScores: WeightedScoreBreakdown;
+  topicEvidenceExpanders: TopicEvidenceExpander[];
+  demonstratedStrengths: string[];
+  knowledgeGaps: string[];
+  expressionGaps: string[];
+  showKnowledgeVsExpressionInsight: boolean;
+  insightMessage?: string;
+  misconceptionsFound: MisconceptionItem[];
+  profileDivergenceNotes: string[];
+  transferAbility: string;
+  interviewMode?: string;
+  jdRequirementCoverage?: any[];
+  refinementDiffs: RefinementDiff[];
+  personalPlaybookFormulas: Record<string, string>[];
+  summaryFeedback: string;
 }

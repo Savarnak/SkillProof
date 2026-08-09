@@ -92,29 +92,34 @@ class QuestionGenerator:
                 pending_item
             )
 
-        # 5. If topic has sufficient evidence or depth >= 2, move to next curriculum day
+        # 5. If topic has sufficient evidence or depth >= 2, switch to an uncovered curriculum day / topic
         if len(current_topic_assessment.evidence) >= 1 or current_topic_assessment.depth >= 2:
-            # First priority: find a topic on a curriculum day not yet covered
-            for day, topic in all_topics:
-                if day.day_number not in covered_days_list:
-                    return (
-                        AdaptiveAction.CHANGE_TOPIC,
-                        topic.topic_id,
-                        1,
-                        f"switch_to_uncovered_day_{day.day_number}",
-                        pending_item
-                    )
-            
-            # Second priority: pick any unassessed topic
-            for day, topic in all_topics:
-                if topic.topic_id != current_topic_assessment.topic_id:
-                    return (
-                        AdaptiveAction.CHANGE_TOPIC,
-                        topic.topic_id,
-                        1,
-                        "sufficient_evidence_switch_topic",
-                        pending_item
-                    )
+            # First priority: find a topic whose day_number is NOT in covered_days_list yet
+            uncovered_day_topics = [
+                (d, t) for d, t in all_topics
+                if d.day_number not in covered_days_list and t.topic_id != current_topic_assessment.topic_id
+            ]
+            if uncovered_day_topics:
+                next_day, next_topic = uncovered_day_topics[0]
+                return (
+                    AdaptiveAction.CHANGE_TOPIC,
+                    next_topic.topic_id,
+                    min(5, current_topic_assessment.depth + 1),
+                    f"switching_to_uncovered_day_{next_day.day_number}",
+                    pending_item
+                )
+
+            # Second priority: pick any topic that is NOT the current topic
+            other_topics = [(d, t) for d, t in all_topics if t.topic_id != current_topic_assessment.topic_id]
+            if other_topics:
+                next_day, next_topic = other_topics[0]
+                return (
+                    AdaptiveAction.CHANGE_TOPIC,
+                    next_topic.topic_id,
+                    min(5, current_topic_assessment.depth + 1),
+                    "switching_topic_balanced_coverage",
+                    pending_item
+                )
 
         # 6. Default: GO_DEEPER on current topic
         next_depth = min(5, current_topic_assessment.depth + 1)
@@ -135,7 +140,8 @@ class QuestionGenerator:
         target_depth: int,
         candidate: Optional[Candidate] = None,
         pending_evidence_item: Optional[str] = None,
-        previous_answer: Optional[str] = None
+        previous_answer: Optional[str] = None,
+        asked_questions: Optional[List[str]] = None
     ) -> Tuple[str, InterviewDecision]:
         """Generates question text and constructs the structured InterviewDecision object."""
         scaffold_prompt = None
@@ -148,16 +154,14 @@ class QuestionGenerator:
                 email="demo@skillproof.internal",
                 is_synthetic_demo=True,
                 background_summary="",
-                target_role="Senior AI Systems Engineer"
+                target_role="Software Engineer",
+                completed_missions=[]
             )
             transfer_domain = cls.select_transfer_domain(cand, day.day_number)
+        elif action == AdaptiveAction.EXPRESSION_SCAFFOLD:
+            scaffold_prompt = "high_knowledge_unclear_expression"
 
-        if action == AdaptiveAction.RECOVER:
-            scaffold_prompt = f"Simplify {topic.name} into basic functional elements"
-
-        if action == AdaptiveAction.EXPRESSION_SCAFFOLD:
-            scaffold_prompt = f"Structure explanation of {topic.name} into three parts"
-
+        # Generate base question text
         question_text = llm_service.generate_question_text(
             action=action,
             topic_name=topic.name,
@@ -168,6 +172,24 @@ class QuestionGenerator:
             transfer_domain=transfer_domain,
             previous_answer=previous_answer
         )
+
+        # Prevent duplicate question texts in the same session
+        if asked_questions:
+            current_try_depth = target_depth
+            attempts = 0
+            while question_text in asked_questions and attempts < 5:
+                current_try_depth = (current_try_depth % 5) + 1
+                question_text = llm_service.generate_question_text(
+                    action=action,
+                    topic_name=topic.name,
+                    day_number=day.day_number,
+                    target_depth=current_try_depth,
+                    pending_evidence_item=pending_evidence_item,
+                    scaffold_prompt=scaffold_prompt,
+                    transfer_domain=transfer_domain,
+                    previous_answer=previous_answer
+                )
+                attempts += 1
 
         decision = InterviewDecision(
             action=action,

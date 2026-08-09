@@ -16,6 +16,8 @@ from app.interview.evaluator import answer_evaluator
 from app.interview.question_generator import question_generator
 from app.interview.logger import interview_logger
 
+from app.interview.jd_analyzer import jd_analyzer
+
 class InterviewEngine:
     """Core Orchestrator for SkillProof Adaptive AI Technical Interviewer Engine."""
 
@@ -67,11 +69,16 @@ class InterviewEngine:
         curriculum_id: str = "curr_ai_eng_v1",
         min_questions: int = 8,
         min_curriculum_days: int = 4,
-        max_questions: int = 15
+        max_questions: int = 15,
+        selected_topics: List[str] = [],
+        selected_categories: List[str] = [],
+        target_role: Optional[str] = None,
+        job_description: Optional[str] = None,
+        mode: str = "learning_journey"
     ) -> Tuple[InterviewState, str]:
         """
         Initializes an interview session, builds candidate strategy plan,
-        and generates the first question.
+        and generates the first question. Supports both learning journey and JD modes.
         """
         session_id = f"session_{uuid.uuid4().hex[:8]}"
         state = self.session_store.create_session(
@@ -82,6 +89,11 @@ class InterviewEngine:
             min_curriculum_days=min_curriculum_days
         )
         state.maxQuestions = max_questions
+        state.selectedTopics = selected_topics
+        state.selectedCategories = selected_categories
+        state.targetRole = target_role
+        state.jobDescription = job_description
+        state.interviewMode = mode
 
         candidate = self._candidates_cache.get(
             candidate_id,
@@ -91,9 +103,22 @@ class InterviewEngine:
                 email="demo@skillproof.internal",
                 is_synthetic_demo=True,
                 background_summary="Generic engineering background",
-                target_role="Senior AI Systems Engineer"
+                target_role=target_role or "Senior AI Systems Engineer"
             )
         )
+        if target_role:
+            candidate.target_role = target_role
+
+        # If JD mode or job description is provided, run JD Analyzer
+        if job_description or mode == "job_description":
+            state.interviewMode = "job_description"
+            jd_res = jd_analyzer.analyze_jd(job_description or "")
+            if not state.targetRole:
+                state.targetRole = jd_res.extracted_role
+                candidate.target_role = jd_res.extracted_role
+            state.jdRequirementCoverage = [item.model_dump() for item in jd_res.requirements_map]
+            if not state.selectedTopics:
+                state.selectedTopics = jd_res.required_skills
 
         curriculum = self._curriculum_cache
         if not curriculum:
@@ -102,11 +127,16 @@ class InterviewEngine:
         # Create initial plan & pending evidence list
         topics_map, global_pending_ev, start_topic_id, start_day_id, start_depth = InterviewPlanner.create_initial_plan(
             candidate=candidate,
-            curriculum=curriculum
+            curriculum=curriculum,
+            selected_topics=state.selectedTopics,
+            target_role=state.targetRole,
+            job_description=state.jobDescription
         )
 
-        start_day, start_topic = self._find_topic_and_day(start_topic_id)
-        pending_item = topics_map[start_topic_id].pending_evidence_list[0] if topics_map[start_topic_id].pending_evidence_list else None
+        start_topic_obj = topics_map[start_topic_id]
+        start_day = CurriculumDay(day_id=start_topic_obj.day_id, day_number=start_topic_obj.day_number, title=f"Day {start_topic_obj.day_number}: {start_topic_obj.topic_name}", topics=[])
+        start_topic = Topic(topic_id=start_topic_obj.topic_id, name=start_topic_obj.topic_name, description=f"Core concepts of {start_topic_obj.topic_name}", learning_objectives=start_topic_obj.pending_evidence_list)
+        pending_item = start_topic_obj.pending_evidence_list[0] if start_topic_obj.pending_evidence_list else None
 
         # Generate Question 1
         q_text, decision = question_generator.generate_question(
@@ -237,7 +267,14 @@ class InterviewEngine:
 
         # 3. Decide Next Action & Target Topic
         misconception_flagged = len(eval_result.misconceptions) > 0
-        all_topics = self.get_all_topics()
+        
+        session_topics: List[Tuple[CurriculumDay, Topic]] = []
+        for tid, tass in state.topicsAssessed.items():
+            day_obj = CurriculumDay(day_id=tass.day_id, day_number=tass.day_number, title=f"Day {tass.day_number}: {tass.topic_name}", topics=[])
+            topic_obj = Topic(topic_id=tass.topic_id, name=tass.topic_name, description=f"Core concepts of {tass.topic_name}", learning_objectives=tass.pending_evidence_list)
+            session_topics.append((day_obj, topic_obj))
+
+        all_topics = session_topics if session_topics else self.get_all_topics()
 
         next_action, next_topic_id, next_depth, reason_code, pending_item = question_generator.decide_next_action(
             eval_result_action=eval_result.recommendedNextAction,
@@ -253,7 +290,12 @@ class InterviewEngine:
         if next_action == AdaptiveAction.TRANSFER and current_turn.topic_id not in state.transferChallengesUsed:
             state.transferChallengesUsed.append(current_turn.topic_id)
 
-        next_day, next_topic = self._find_topic_and_day(next_topic_id)
+        if next_topic_id in state.topicsAssessed:
+            tass = state.topicsAssessed[next_topic_id]
+            next_day = CurriculumDay(day_id=tass.day_id, day_number=tass.day_number, title=f"Day {tass.day_number}: {tass.topic_name}", topics=[])
+            next_topic = Topic(topic_id=tass.topic_id, name=tass.topic_name, description=f"Core concepts of {tass.topic_name}", learning_objectives=tass.pending_evidence_list)
+        else:
+            next_day, next_topic = self._find_topic_and_day(next_topic_id)
 
         # Update covered days list
         if next_day.day_number not in state.curriculumDaysCovered:
@@ -267,7 +309,26 @@ class InterviewEngine:
             state.questionCount >= state.maxQuestions
         )
 
+        # Auto-complete interview if mandatory coverage (8 questions & 4 topics) is reached
+        if state.canConclude and state.questionCount >= state.minQuestions:
+            state.interviewStatus = SessionStatus.COMPLETED
+            state.completionReason = "mandatory_coverage_reached"
+            log_entry = interview_logger.log_event(
+                session_id,
+                "INTERVIEW_COMPLETED",
+                {
+                    "total_questions": state.questionCount,
+                    "days_covered": len(state.curriculumDaysCovered),
+                    "status": "completed",
+                    "reason": state.completionReason
+                }
+            )
+            state.eventLogs.append(log_entry)
+            self.session_store.update_session(state)
+            return state, None
+
         # 4. Generate Next Question
+        asked_q_texts = [t.question_text for t in state.conversationHistory]
         next_question_text, decision = question_generator.generate_question(
             action=next_action,
             topic=next_topic,
@@ -275,7 +336,8 @@ class InterviewEngine:
             target_depth=next_depth,
             candidate=candidate,
             pending_evidence_item=pending_item,
-            previous_answer=candidate_answer
+            previous_answer=candidate_answer,
+            asked_questions=asked_q_texts
         )
 
         state.currentTopic = next_topic_id
@@ -313,25 +375,37 @@ class InterviewEngine:
 
     def finish_interview(self, session_id: str) -> InterviewState:
         """
-        Concludes interview session. Enforces deterministic backend constraints & max questions limit.
-        Fails if questionCount < 8 or uniqueCurriculumDays < 4 unless maxQuestions is reached.
+        Concludes interview session. Enforces deterministic backend constraints.
+        If mandatory coverage (8 questions & 4 days) is met, sets status to COMPLETED.
+        If maxQuestions (15) is hit without mandatory coverage, sets status to INCOMPLETE.
         """
         state = self.session_store.get_session(session_id)
         if not state:
             raise ValueError(f"Session '{session_id}' not found")
 
-        if not state.canConclude and state.questionCount < state.maxQuestions:
-            if state.questionCount < state.minQuestions or len(state.curriculumDaysCovered) < state.minCurriculumDays:
-                raise ValueError(
-                    f"Cannot finish interview: Deterministic constraints not met. "
-                    f"Questions asked: {state.questionCount}/{state.minQuestions}, "
-                    f"Curriculum Days covered: {len(state.curriculumDaysCovered)}/{state.minCurriculumDays}"
-                )
+        has_mandatory_coverage = (
+            state.questionCount >= state.minQuestions and
+            len(state.curriculumDaysCovered) >= state.minCurriculumDays
+        )
 
-        state.interviewStatus = SessionStatus.COMPLETED
+        if has_mandatory_coverage:
+            state.interviewStatus = SessionStatus.COMPLETED
+            state.completionReason = "mandatory_coverage_reached"
+        elif state.questionCount >= state.maxQuestions:
+            state.interviewStatus = SessionStatus.INITIALIZED  # Marked incomplete
+            state.completionReason = "mandatory_coverage_not_reached"
+        else:
+            raise ValueError(
+                f"Cannot finish interview: Deterministic constraints not met. "
+                f"Questions asked: {state.questionCount}/{state.minQuestions}, "
+                f"Curriculum Days covered: {len(state.curriculumDaysCovered)}/{state.minCurriculumDays}"
+            )
+
         log_entry = interview_logger.log_event("INTERVIEW_COMPLETED", session_id, {
             "total_questions": state.questionCount,
-            "days_covered": len(state.curriculumDaysCovered)
+            "days_covered": len(state.curriculumDaysCovered),
+            "status": state.interviewStatus,
+            "reason": state.completionReason
         })
         state.eventLogs.append(log_entry)
         self.session_store.update_session(state)
@@ -371,12 +445,15 @@ class InterviewEngine:
         refinements = []
         for turn in state.conversationHistory:
             if turn.candidate_answer and turn.evaluation and turn.evaluation.technicalCorrectness > 0.4:
+                tass = state.topicsAssessed.get(turn.topic_id)
+                tname = tass.topic_name if tass else turn.topic_id
+                polished = f"{turn.candidate_answer.strip().rstrip('.')} — Specifically, for {tname}, I would structure the explanation around core architecture, trade-offs, and failure handling."
                 refinements.append({
                     "question": turn.question_text,
                     "originalAnswer": turn.candidate_answer,
                     "whatWasGood": ", ".join(turn.evaluation.strengths) or "Clear core attempt",
                     "whatCouldImprove": ", ".join(turn.evaluation.missingConcepts + turn.evaluation.expressionIssues) or "Add more system design detail",
-                    "interviewReadyVersion": f"Regarding {turn.topic_id}, {turn.candidate_answer} Specifically, I would evaluate production memory consumption and vector index latency.",
+                    "interviewReadyVersion": polished,
                     "howToDeliver": "Deliver directly starting with the high-level architecture before detailing components."
                 })
 
