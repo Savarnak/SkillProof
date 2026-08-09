@@ -1,2 +1,16 @@
+[project]
+name = "skillproof-backend"
+version = "0.1.0"
+description = "SkillProof FastAPI backend"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.110.0,<0.112.0",
+    "uvicorn[standard]>=0.28.0,<0.31.0",
+    "pydantic>=2.6.0,<3.0.0",
+    "pydantic-settings>=2.2.0,<3.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "httpx>=0.27.0,<0.28.0"
+]
+
 [tool.vercel]
 entrypoint = "app.main:app"
