@@ -15,6 +15,7 @@ class AdaptiveAction(str, Enum):
     PROBE = "PROBE"
     REPHRASE = "REPHRASE"
     RECOVER = "RECOVER"
+    EXPRESSION_SCAFFOLD = "EXPRESSION_SCAFFOLD"
     CHANGE_TOPIC = "CHANGE_TOPIC"
     TRANSFER = "TRANSFER"
     END = "END"
@@ -25,6 +26,12 @@ class TopicStatus(str, Enum):
     SUFFICIENT_EVIDENCE = "sufficient_evidence"
     MASTERED = "mastered"
 
+class MisconceptionStatus(str, Enum):
+    IDENTIFIED = "identified"
+    PROBED = "probed"
+    RESOLVED = "resolved"
+    PERSISTS = "persists"
+
 class SessionStatus(str, Enum):
     INITIALIZED = "initialized"
     IN_PROGRESS = "in_progress"
@@ -33,8 +40,15 @@ class SessionStatus(str, Enum):
 class MisconceptionItem(BaseModel):
     topic: str
     misconception: str
-    status: str = "identified"  # identified, probed, resolved
+    status: MisconceptionStatus = MisconceptionStatus.IDENTIFIED
     detected_at_turn: int
+    resolution_turn: Optional[int] = None
+
+class EvidenceConfidence(BaseModel):
+    score: float = Field(0.0, ge=0.0, le=1.0)
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    evidenceCount: int = 0
+    sourceQuestions: List[int] = Field(default_factory=list)
 
 class TopicAssessment(BaseModel):
     topic_id: str
@@ -47,6 +61,10 @@ class TopicAssessment(BaseModel):
     depth: int = Field(1, ge=1, le=6)
     status: TopicStatus = TopicStatus.NOT_STARTED
     evidence: List[str] = Field(default_factory=list)
+    pending_evidence_list: List[str] = Field(default_factory=list)
+    knowledge_confidence: float = Field(0.0, ge=0.0, le=1.0)
+    expression_confidence: float = Field(0.0, ge=0.0, le=1.0)
+    expression_recovery_used: bool = False
     misconceptions: List[str] = Field(default_factory=list)
 
 class AnswerEvaluation(BaseModel):
@@ -66,6 +84,7 @@ class AnswerEvaluation(BaseModel):
     evidence: List[str] = Field(default_factory=list)
     
     isStrugglingOrDontKnow: bool = False
+    isExpressionUnclear: bool = False
     recommendedNextAction: AdaptiveAction = AdaptiveAction.GO_DEEPER
     recommendedReasonCode: str = "evaluated_response"
 
@@ -103,17 +122,20 @@ class InterviewState(BaseModel):
     currentDepth: int = 1
     conversationHistory: List[QuestionTurn] = Field(default_factory=list)
     skillEvidence: List[str] = Field(default_factory=list)
+    pendingEvidence: List[str] = Field(default_factory=list)
     strengths: List[str] = Field(default_factory=list)
     knowledgeGaps: List[str] = Field(default_factory=list)
     expressionGaps: List[str] = Field(default_factory=list)
     misconceptions: List[MisconceptionItem] = Field(default_factory=list)
-    pendingEvidence: List[str] = Field(default_factory=list)
     transferChallengesUsed: List[str] = Field(default_factory=list)
+    profileVsEvidenceDivergence: List[str] = Field(default_factory=list)
+    eventLogs: List[Dict[str, Any]] = Field(default_factory=list)
     interviewStatus: SessionStatus = SessionStatus.INITIALIZED
     
-    # Deterministic Rule Counters
+    # Deterministic Rule Thresholds
     minQuestions: int = 8
     minCurriculumDays: int = 4
+    maxQuestions: int = 15
     canConclude: bool = False
     
     created_at: str
@@ -131,6 +153,7 @@ class InterviewReport(BaseModel):
     knowledgeGaps: List[str]
     expressionGaps: List[str]
     misconceptionsFound: List[MisconceptionItem]
+    profileDivergenceNotes: List[str]
     topicSummaries: Dict[str, TopicAssessment]
     transferAbility: str
     answerRefinementSuggestions: List[Dict[str, str]]

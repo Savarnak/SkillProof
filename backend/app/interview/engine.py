@@ -14,9 +14,10 @@ from app.interview.state import session_store
 from app.interview.planner import InterviewPlanner
 from app.interview.evaluator import answer_evaluator
 from app.interview.question_generator import question_generator
+from app.interview.logger import interview_logger
 
 class InterviewEngine:
-    """Core Orchestrator for SkillProof Adaptive AI Technical Interviewer."""
+    """Core Orchestrator for SkillProof Adaptive AI Technical Interviewer Engine."""
 
     def __init__(self):
         self.session_store = session_store
@@ -65,7 +66,8 @@ class InterviewEngine:
         candidate_id: str,
         curriculum_id: str = "curr_ai_eng_v1",
         min_questions: int = 8,
-        min_curriculum_days: int = 4
+        min_curriculum_days: int = 4,
+        max_questions: int = 15
     ) -> Tuple[InterviewState, str]:
         """
         Initializes an interview session, builds candidate strategy plan,
@@ -79,6 +81,7 @@ class InterviewEngine:
             min_questions=min_questions,
             min_curriculum_days=min_curriculum_days
         )
+        state.maxQuestions = max_questions
 
         candidate = self._candidates_cache.get(
             candidate_id,
@@ -88,7 +91,7 @@ class InterviewEngine:
                 email="demo@skillproof.internal",
                 is_synthetic_demo=True,
                 background_summary="Generic engineering background",
-                target_role="AI Engineer"
+                target_role="Senior AI Systems Engineer"
             )
         )
 
@@ -96,25 +99,29 @@ class InterviewEngine:
         if not curriculum:
             raise ValueError("Curriculum data unavailable")
 
-        # Create initial plan
-        topics_map, start_topic_id, start_day_id, start_depth = InterviewPlanner.create_initial_plan(
+        # Create initial plan & pending evidence list
+        topics_map, global_pending_ev, start_topic_id, start_day_id, start_depth = InterviewPlanner.create_initial_plan(
             candidate=candidate,
             curriculum=curriculum
         )
 
         start_day, start_topic = self._find_topic_and_day(start_topic_id)
+        pending_item = topics_map[start_topic_id].pending_evidence_list[0] if topics_map[start_topic_id].pending_evidence_list else None
 
         # Generate Question 1
         q_text, decision = question_generator.generate_question(
             action=AdaptiveAction.GO_DEEPER,
             topic=start_topic,
             day=start_day,
-            target_depth=start_depth
+            target_depth=start_depth,
+            candidate=candidate,
+            pending_evidence_item=pending_item
         )
 
         # Update State
         state.interviewStatus = SessionStatus.IN_PROGRESS
         state.topicsAssessed = topics_map
+        state.pendingEvidence = global_pending_ev
         state.currentTopic = start_topic_id
         state.currentDayId = start_day_id
         state.currentDepth = start_depth
@@ -135,6 +142,15 @@ class InterviewEngine:
         )
 
         state.conversationHistory.append(turn_1)
+
+        # Log event
+        log_entry = interview_logger.log_event("INTERVIEW_STARTED", session_id, {
+            "candidate_id": candidate_id,
+            "starting_topic": start_topic_id,
+            "starting_depth": start_depth
+        })
+        state.eventLogs.append(log_entry)
+
         self.session_store.update_session(state)
 
         return state, q_text
@@ -166,16 +182,24 @@ class InterviewEngine:
             answer_text=candidate_answer,
             topic_assessment=topic_assessment,
             current_depth=current_turn.depth_level,
-            turn_index=current_turn.turn_index
+            turn_index=current_turn.turn_index,
+            existing_misconceptions=state.misconceptions
         )
 
         current_turn.evaluation = eval_result
         state.topicsAssessed[current_turn.topic_id] = updated_assessment
 
+        # Handle Expression Scaffolding Flag
+        if eval_result.isExpressionUnclear:
+            updated_assessment.expression_recovery_used = True
+
         # Collect Evidence & Misconceptions
         for ev in eval_result.evidence:
             if ev not in state.skillEvidence:
                 state.skillEvidence.append(ev)
+            # Remove from global pending evidence if present
+            if ev in state.pendingEvidence:
+                state.pendingEvidence.remove(ev)
 
         for str_item in eval_result.strengths:
             if str_item not in state.strengths:
@@ -192,22 +216,32 @@ class InterviewEngine:
         for misc in new_misconceptions:
             state.misconceptions.append(misc)
 
-        # 2. Check Deterministic Backend Constraints
-        unique_days = set(state.curriculumDaysCovered)
-        if len(state.coveredDayIds) < len(unique_days):
-            pass # keep consistent
-        
+        # Detect Candidate Profile vs Live Evidence Divergence
+        candidate = self._candidates_cache.get(state.candidateId)
+        if candidate:
+            completed_days = {m.day_id for m in candidate.completed_missions}
+            if current_turn.day_id in completed_days and eval_result.technicalCorrectness < 0.30:
+                div_note = f"Day {current_turn.day_number} ({current_turn.topic_id}): Profile listed mission as completed, but candidate demonstrated insufficient evidence."
+                if div_note not in state.profileVsEvidenceDivergence:
+                    state.profileVsEvidenceDivergence.append(div_note)
+            elif current_turn.day_id not in completed_days and eval_result.technicalCorrectness > 0.85:
+                div_note = f"Day {current_turn.day_number} ({current_turn.topic_id}): Profile listed no completion signal, but candidate demonstrated strong mastery."
+                if div_note not in state.profileVsEvidenceDivergence:
+                    state.profileVsEvidenceDivergence.append(div_note)
+
+        # 2. Check Deterministic Backend Constraints & Max Questions
         state.canConclude = (
-            state.questionCount >= state.minQuestions and
-            len(state.curriculumDaysCovered) >= state.minCurriculumDays
+            (state.questionCount >= state.minQuestions and len(state.curriculumDaysCovered) >= state.minCurriculumDays) or
+            state.questionCount >= state.maxQuestions
         )
 
         # 3. Decide Next Action & Target Topic
         misconception_flagged = len(eval_result.misconceptions) > 0
         all_topics = self.get_all_topics()
 
-        next_action, next_topic_id, next_depth, reason_code = question_generator.decide_next_action(
+        next_action, next_topic_id, next_depth, reason_code, pending_item = question_generator.decide_next_action(
             eval_result_action=eval_result.recommendedNextAction,
+            is_expression_unclear=eval_result.isExpressionUnclear,
             current_topic_assessment=updated_assessment,
             total_questions=state.questionCount,
             covered_days_count=len(state.curriculumDaysCovered),
@@ -229,8 +263,8 @@ class InterviewEngine:
 
         # Re-check completion criteria after day tracking
         state.canConclude = (
-            state.questionCount >= state.minQuestions and
-            len(state.curriculumDaysCovered) >= state.minCurriculumDays
+            (state.questionCount >= state.minQuestions and len(state.curriculumDaysCovered) >= state.minCurriculumDays) or
+            state.questionCount >= state.maxQuestions
         )
 
         # 4. Generate Next Question
@@ -239,6 +273,8 @@ class InterviewEngine:
             topic=next_topic,
             day=next_day,
             target_depth=next_depth,
+            candidate=candidate,
+            pending_evidence_item=pending_item,
             previous_answer=candidate_answer
         )
 
@@ -261,27 +297,43 @@ class InterviewEngine:
         )
 
         state.conversationHistory.append(next_turn)
+
+        # Log event
+        log_entry = interview_logger.log_event("ANSWER_EVALUATED", session_id, {
+            "turn_index": current_turn.turn_index,
+            "action_selected": next_action.value,
+            "next_topic": next_topic_id,
+            "technical_correctness": eval_result.technicalCorrectness
+        })
+        state.eventLogs.append(log_entry)
+
         self.session_store.update_session(state)
 
         return state, next_question_text
 
     def finish_interview(self, session_id: str) -> InterviewState:
         """
-        Concludes interview session. Enforces deterministic backend constraints.
-        Fails if questionCount < 8 or uniqueCurriculumDays < 4.
+        Concludes interview session. Enforces deterministic backend constraints & max questions limit.
+        Fails if questionCount < 8 or uniqueCurriculumDays < 4 unless maxQuestions is reached.
         """
         state = self.session_store.get_session(session_id)
         if not state:
             raise ValueError(f"Session '{session_id}' not found")
 
-        if not state.canConclude and (state.questionCount < state.minQuestions or len(state.curriculumDaysCovered) < state.minCurriculumDays):
-            raise ValueError(
-                f"Cannot finish interview: Deterministic constraints not met. "
-                f"Questions asked: {state.questionCount}/{state.minQuestions}, "
-                f"Curriculum Days covered: {len(state.curriculumDaysCovered)}/{state.minCurriculumDays}"
-            )
+        if not state.canConclude and state.questionCount < state.maxQuestions:
+            if state.questionCount < state.minQuestions or len(state.curriculumDaysCovered) < state.minCurriculumDays:
+                raise ValueError(
+                    f"Cannot finish interview: Deterministic constraints not met. "
+                    f"Questions asked: {state.questionCount}/{state.minQuestions}, "
+                    f"Curriculum Days covered: {len(state.curriculumDaysCovered)}/{state.minCurriculumDays}"
+                )
 
         state.interviewStatus = SessionStatus.COMPLETED
+        log_entry = interview_logger.log_event("INTERVIEW_COMPLETED", session_id, {
+            "total_questions": state.questionCount,
+            "days_covered": len(state.curriculumDaysCovered)
+        })
+        state.eventLogs.append(log_entry)
         self.session_store.update_session(state)
         return state
 
@@ -299,7 +351,7 @@ class InterviewEngine:
                 email="candidate@skillproof.internal",
                 is_synthetic_demo=True,
                 background_summary="",
-                target_role="AI Engineer"
+                target_role="Senior AI Systems Engineer"
             )
         )
 
@@ -314,7 +366,7 @@ class InterviewEngine:
             avg_knowledge = 0.5
             avg_expression = 0.5
 
-        transfer_status = "Demonstrated successful transfer to real-world domain" if len(state.transferChallengesUsed) > 0 else "Concept transfer not attempted"
+        transfer_status = f"Demonstrated cross-domain transfer to {len(state.transferChallengesUsed)} real-world scenarios" if len(state.transferChallengesUsed) > 0 else "Concept transfer not attempted"
 
         refinements = []
         for turn in state.conversationHistory:
@@ -324,7 +376,7 @@ class InterviewEngine:
                     "originalAnswer": turn.candidate_answer,
                     "whatWasGood": ", ".join(turn.evaluation.strengths) or "Clear core attempt",
                     "whatCouldImprove": ", ".join(turn.evaluation.missingConcepts + turn.evaluation.expressionIssues) or "Add more system design detail",
-                    "interviewReadyVersion": f"In {turn.topic_id}, {turn.candidate_answer} Specifically, I would consider production latency and vector index caching.",
+                    "interviewReadyVersion": f"Regarding {turn.topic_id}, {turn.candidate_answer} Specifically, I would evaluate production memory consumption and vector index latency.",
                     "howToDeliver": "Deliver directly starting with the high-level architecture before detailing components."
                 })
 
@@ -340,6 +392,7 @@ class InterviewEngine:
             knowledgeGaps=state.knowledgeGaps[:5],
             expressionGaps=state.expressionGaps[:5],
             misconceptionsFound=state.misconceptions,
+            profileDivergenceNotes=state.profileVsEvidenceDivergence,
             topicSummaries=state.topicsAssessed,
             transferAbility=transfer_status,
             answerRefinementSuggestions=refinements[:3],

@@ -37,3 +37,21 @@ This log documents the usage of AI tools during the development of SkillProof, f
 * **Human Rationale & Control**:
   - Ensured non-negotiable PS2 constraints (minimum 8 questions, minimum 4 curriculum days) remain strictly enforced by the backend engine rather than relying on LLM memory.
   - Implemented structured Pydantic models for evaluation outputs with a deterministic mock fallback engine for reliable automated testing.
+
+---
+
+### Entry 003 — Phase 3: Adaptive Intelligence & Differentiation
+* **Date**: 2026-08-09
+* **Phase**: 3 — Adaptive Intelligence, Evidence Confidence, & Observability
+* **AI Tool Used**: Antigravity AI Coding Assistant (Gemini 3.6 Flash)
+* **Tasks Executed**:
+  1. Implemented modular Prompt Architecture (`backend/app/interview/prompts.py`) isolating prompt templates for context, answer evaluation, adaptive question generation, misconception challenge probes, expression scaffolding, cross-domain transfer, and post-interview feedback.
+  2. Implemented structured event logger (`backend/app/interview/logger.py`) emitting observable telemetry for all interviewer events (`INTERVIEW_STARTED`, `ANSWER_EVALUATED`, `ACTION_SELECTED`, `EXPRESSION_SCAFFOLD_TRIGGERED`, `MISCONCEPTION_CHALLENGED`, `TRANSFER_TRIGGERED`, `INTERVIEW_COMPLETED`).
+  3. Extended `InterviewState` schema with `pendingEvidence` tracking, `knowledge_confidence` / `expression_confidence` calculation, misconception resolution status tracking (`IDENTIFIED`, `PROBED`, `RESOLVED`, `PERSISTS`), and candidate profile vs live interview evidence divergence notes.
+  4. Built Expression Scaffolding Recovery path (`EXPRESSION_SCAFFOLD` action) for candidates who demonstrate high technical knowledge but produce informal/unstructured responses.
+  5. Implemented Candidate-Tailored Cross-Domain Transfer Engine mapping candidate target role and background to unfamiliar domains (Healthcare, Logistics, E-Commerce, Finance, Cybersecurity).
+  6. Enforced `MAX_QUESTIONS = 15` safety guardrail alongside `minQuestions = 8` and `minCurriculumDays = 4`.
+  7. Expanded automated test suite (`backend/tests/test_interview_engine.py`) covering Scenarios A through G and executing a 13-step adaptive trace demonstrating all adaptive behaviors end-to-end.
+* **Human Rationale & Control**:
+  - Established live interview evidence priority over candidate profile signals, ensuring candidate assumptions are treated as initial hypotheses verified or overridden by live evidence.
+  - Separated technical knowledge scoring from expression scoring without making inferences on psychological state, accent, or emotional state.

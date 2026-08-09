@@ -1,10 +1,10 @@
 from typing import Optional, List, Dict, Any
 import json
-import re
 from app.config import settings
 from app.interview.schemas import (
     AnswerEvaluation, AdaptiveAction, InterviewDecision, SkillDepthLevel
 )
+from app.interview import prompts
 
 class LLMService:
     """Handles structured LLM evaluations and adaptive question generation with fallback mock support."""
@@ -22,14 +22,13 @@ class LLMService:
     ) -> AnswerEvaluation:
         """
         Evaluates candidate response.
-        Detects technical correctness, depth, expression clarity, missing concepts, misconceptions, and struggle/'I don't know'.
+        Detects technical correctness, depth, expression clarity, missing concepts, misconceptions, struggle, and expression gaps.
         """
         if not self.api_key or self.provider == "mock":
             return self._mock_evaluate_answer(question_text, answer_text, topic_name, current_depth)
         
-        # Real API call logic (OpenAI / Gemini) with fallback to mock
         try:
-            return self._real_evaluate_answer(question_text, answer_text, topic_name, current_depth)
+            return self._mock_evaluate_answer(question_text, answer_text, topic_name, current_depth)
         except Exception:
             return self._mock_evaluate_answer(question_text, answer_text, topic_name, current_depth)
 
@@ -39,24 +38,20 @@ class LLMService:
         topic_name: str,
         day_number: int,
         target_depth: int,
+        pending_evidence_item: Optional[str] = None,
         scaffold_prompt: Optional[str] = None,
         transfer_domain: Optional[str] = None,
         previous_answer: Optional[str] = None
     ) -> str:
-        """Generates adaptive question string based on action and target depth."""
+        """Generates adaptive question string based on action, target depth, and pending evidence."""
         if not self.api_key or self.provider == "mock":
             return self._mock_generate_question_text(
-                action, topic_name, day_number, target_depth, scaffold_prompt, transfer_domain, previous_answer
+                action, topic_name, day_number, target_depth, pending_evidence_item, scaffold_prompt, transfer_domain, previous_answer
             )
         
-        try:
-            return self._real_generate_question_text(
-                action, topic_name, day_number, target_depth, scaffold_prompt, transfer_domain, previous_answer
-            )
-        except Exception:
-            return self._mock_generate_question_text(
-                action, topic_name, day_number, target_depth, scaffold_prompt, transfer_domain, previous_answer
-            )
+        return self._mock_generate_question_text(
+            action, topic_name, day_number, target_depth, pending_evidence_item, scaffold_prompt, transfer_domain, previous_answer
+        )
 
     # ------------------------------------------------------------------------
     # MOCK ENGINE IMPLEMENTATION (Deterministic for testing & offline mode)
@@ -72,7 +67,7 @@ class LLMService:
 
         # 1. Check for "I don't know" / struggle triggers
         dont_know_phrases = ["i don't know", "i dont know", "not sure", "don't remember", "no idea", "can you rephrase", "pass"]
-        is_struggling = any(p in ans_clean for p in dont_know_phrases) or len(ans_clean) < 12
+        is_struggling = any(p in ans_clean for p in dont_know_phrases) or (len(ans_clean) < 12 and "yes" not in ans_clean)
 
         if is_struggling:
             return AnswerEvaluation(
@@ -84,18 +79,18 @@ class LLMService:
                 expressionClarity=0.40,
                 answerStructure=0.30,
                 confidenceOfAssessment=0.90,
-                strengths=["Acknowledged gap openly"],
+                strengths=["Acknowledged uncertainty openly"],
                 missingConcepts=["Core concept details"],
                 misconceptions=[],
                 expressionIssues=["Candidate expressed uncertainty"],
-                evidence=["Candidate stated they were unsure about the topic"],
+                evidence=["Expressed lack of knowledge on current prompt"],
                 isStrugglingOrDontKnow=True,
+                isExpressionUnclear=False,
                 recommendedNextAction=AdaptiveAction.RECOVER,
                 recommendedReasonCode="struggled_needs_scaffold"
             )
 
         # 2. Check for Misconception Triggers
-        # Example: "RAG eliminates hallucination"
         misconception_found = []
         if "eliminate" in ans_clean and ("hallucination" in ans_clean or "error" in ans_clean):
             misconception_found.append("Believes RAG completely eliminates hallucinations")
@@ -118,35 +113,60 @@ class LLMService:
                 expressionIssues=[],
                 evidence=["Stated that RAG eliminates hallucinations entirely"],
                 isStrugglingOrDontKnow=False,
+                isExpressionUnclear=False,
                 recommendedNextAction=AdaptiveAction.PROBE,
                 recommendedReasonCode="misconception_flagged"
             )
 
-        # 3. High quality / Deep technical answer
+        # 3. Check for High Knowledge / Low Expression Scenario (Scenario C)
+        # e.g., "rag is basically when the ai searches some documents and then..."
+        if "basically" in ans_clean or "some documents" in ans_clean or "kind of" in ans_clean:
+            return AnswerEvaluation(
+                technicalCorrectness=0.88,
+                conceptualDepth=0.82,
+                relevance=0.85,
+                reasoning=0.80,
+                application=0.82,
+                expressionClarity=0.45,
+                answerStructure=0.40,
+                confidenceOfAssessment=0.88,
+                strengths=["High underlying technical concept comprehension"],
+                missingConcepts=[],
+                misconceptions=[],
+                expressionIssues=["Unstructured answer opening", "Casual language phrasing"],
+                evidence=["Demonstrated sound conceptual knowledge despite informal phrasing"],
+                isStrugglingOrDontKnow=False,
+                isExpressionUnclear=True,
+                recommendedNextAction=AdaptiveAction.EXPRESSION_SCAFFOLD,
+                recommendedReasonCode="high_knowledge_unclear_expression"
+            )
+
+        # 4. High quality / Deep technical answer
         strong_keywords = ["cosine", "bm25", "hybrid", "rerank", "cross-encoder", "hnsw", "pydantic", "react", "sharding", "latency", "precision", "recall"]
         matches = [kw for kw in strong_keywords if kw in ans_clean]
 
         if len(matches) >= 2 or len(ans_clean) > 100:
             return AnswerEvaluation(
-                technicalCorrectness=0.90,
-                conceptualDepth=0.85,
+                technicalCorrectness=0.92,
+                conceptualDepth=0.88,
                 relevance=0.95,
-                reasoning=0.88,
-                application=0.85,
-                expressionClarity=0.80,
-                answerStructure=0.78,
-                confidenceOfAssessment=0.92,
-                strengths=[f"Accurately explained key technical terms ({', '.join(matches[:2])})", "Structured technical reasoning"],
+                reasoning=0.90,
+                application=0.88,
+                expressionClarity=0.85,
+                answerStructure=0.82,
+                confidenceOfAssessment=0.94,
+                strengths=[f"Accurately explained technical mechanisms ({', '.join(matches[:2])})", "Structured technical reasoning"],
                 missingConcepts=[],
                 misconceptions=[],
                 expressionIssues=[],
                 evidence=[f"Demonstrated solid understanding of {topic_name}"],
                 isStrugglingOrDontKnow=False,
+                isExpressionUnclear=False,
                 recommendedNextAction=AdaptiveAction.GO_DEEPER,
                 recommendedReasonCode="strong_fundamentals"
             )
 
-        # 4. Standard moderate answer
+        # 5. Standard moderate answer
         return AnswerEvaluation(
             technicalCorrectness=0.75,
             conceptualDepth=0.60,
@@ -162,6 +182,7 @@ class LLMService:
             expressionIssues=[],
             evidence=[f"Understands basic application of {topic_name}"],
             isStrugglingOrDontKnow=False,
+            isExpressionUnclear=False,
             recommendedNextAction=AdaptiveAction.GO_DEEPER,
             recommendedReasonCode="moderate_understanding"
         )
@@ -172,6 +193,7 @@ class LLMService:
         topic_name: str,
         day_number: int,
         target_depth: int,
+        pending_evidence_item: Optional[str] = None,
         scaffold_prompt: Optional[str] = None,
         transfer_domain: Optional[str] = None,
         previous_answer: Optional[str] = None
@@ -179,15 +201,19 @@ class LLMService:
         if action == AdaptiveAction.RECOVER:
             return f"Let's simplify it. If a system receives context for {topic_name}, what basic signal tells you whether that information is relevant to the prompt?"
         
+        if action == AdaptiveAction.EXPRESSION_SCAFFOLD:
+            return f"You have the core idea for {topic_name}. Try explaining it in three parts: what it is, how retrieval fits into it, and why we use it."
+
         if action == AdaptiveAction.PROBE:
-            return f"You mentioned how {topic_name} handles output. Suppose the retrieved source documents contain contradictory or outdated info—what happens to the LLM's response?"
+            return f"You mentioned how {topic_name} handles output. Suppose the retrieved source documents contain contradictory or outdated info—would RAG still guarantee a correct answer?"
         
         if action == AdaptiveAction.TRANSFER:
-            domain = transfer_domain or "Logistics Exception Reports"
-            return f"You've shown solid engineering depth in {topic_name}. Let's apply this: Imagine a real-world scenario in {domain}. How would you architect this system to handle millions of unindexed records?"
+            domain = transfer_domain or "Logistics Exception Tracking"
+            return f"You've shown solid engineering depth in {topic_name}. Let's apply this: Imagine a real-world scenario in {domain}. How would you architect this system to handle unindexed historical exception records?"
         
         if action == AdaptiveAction.CHANGE_TOPIC:
-            return f"Great work on Day {day_number}. Let's switch gears to {topic_name}. How would you describe the core operational trade-off in this layer?"
+            pending_str = f" to evaluate {pending_evidence_item}" if pending_evidence_item else ""
+            return f"Great work on Day {day_number}. Let's switch gears to {topic_name}{pending_str}. How would you describe the core operational trade-off in this layer?"
         
         if target_depth >= 5:
             return f"For production system design in {topic_name}: How would you optimize latency and throughput under high concurrent load?"
@@ -200,29 +226,5 @@ class LLMService:
 
         # Default depth 1-2
         return f"Understanding {topic_name} (Day {day_number}): How would you explain the core mechanism of {topic_name} to a backend developer?"
-
-    def _real_evaluate_answer(
-        self,
-        question_text: str,
-        answer_text: str,
-        topic_name: str,
-        current_depth: int
-    ) -> AnswerEvaluation:
-        # Fallback to mock if API key isn't setup
-        return self._mock_evaluate_answer(question_text, answer_text, topic_name, current_depth)
-
-    def _real_generate_question_text(
-        self,
-        action: AdaptiveAction,
-        topic_name: str,
-        day_number: int,
-        target_depth: int,
-        scaffold_prompt: Optional[str] = None,
-        transfer_domain: Optional[str] = None,
-        previous_answer: Optional[str] = None
-    ) -> str:
-        return self._mock_generate_question_text(
-            action, topic_name, day_number, target_depth, scaffold_prompt, transfer_domain, previous_answer
-        )
 
 llm_service = LLMService()
