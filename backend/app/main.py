@@ -39,12 +39,25 @@ def read_root():
 @app.get("/api/health")
 def health_check():
     """Mandatory health check endpoint verifying engine status and sample data availability."""
-    data_dir = Path(__file__).parent.parent.parent / "data"
-    curriculum_file = data_dir / "sample_curriculum.json"
-    candidates_file = data_dir / "sample_candidates.json"
-    
-    curriculum_ok = curriculum_file.exists()
-    candidates_ok = candidates_file.exists()
+    candidate_dirs = [
+        Path(__file__).resolve().parent / "data",                         # backend/app/data
+        Path(__file__).resolve().parent.parent / "data",                  # backend/data
+        Path(__file__).resolve().parent.parent.parent / "data",           # project_root/data
+        Path.cwd() / "data",
+        Path.cwd() / "backend" / "app" / "data",
+    ]
+
+    curriculum_file = None
+    candidates_file = None
+
+    for d in candidate_dirs:
+        if (d / "sample_curriculum.json").exists():
+            curriculum_file = d / "sample_curriculum.json"
+            candidates_file = d / "sample_candidates.json"
+            break
+
+    curriculum_ok = curriculum_file is not None and curriculum_file.exists()
+    candidates_ok = candidates_file is not None and candidates_file.exists()
     
     curriculum_count = 0
     candidate_count = 0

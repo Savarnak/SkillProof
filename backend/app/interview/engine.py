@@ -29,17 +29,30 @@ class InterviewEngine:
         self._load_demo_data()
 
     def _load_demo_data(self):
-        """Loads sample curriculum and candidates from data/ directory."""
-        data_dir = Path(__file__).parent.parent.parent.parent / "data"
-        curr_file = data_dir / "sample_curriculum.json"
-        cand_file = data_dir / "sample_candidates.json"
+        """Loads sample curriculum and candidates from data/ directory across local & Vercel deployment paths."""
+        candidate_dirs = [
+            Path(__file__).resolve().parent.parent / "data",                  # backend/app/data
+            Path(__file__).resolve().parent.parent.parent / "data",           # backend/data
+            Path(__file__).resolve().parent.parent.parent.parent / "data",    # project_root/data
+            Path.cwd() / "data",
+            Path.cwd() / "backend" / "app" / "data",
+        ]
 
-        if curr_file.exists():
+        curr_file = None
+        cand_file = None
+
+        for d in candidate_dirs:
+            if (d / "sample_curriculum.json").exists():
+                curr_file = d / "sample_curriculum.json"
+                cand_file = d / "sample_candidates.json"
+                break
+
+        if curr_file and curr_file.exists():
             with open(curr_file, "r", encoding="utf-8") as f:
                 cdata = json.load(f)
                 self._curriculum_cache = Curriculum(**cdata)
 
-        if cand_file.exists():
+        if cand_file and cand_file.exists():
             with open(cand_file, "r", encoding="utf-8") as f:
                 cands = json.load(f)
                 for c in cands:
