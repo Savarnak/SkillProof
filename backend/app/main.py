@@ -39,47 +39,16 @@ def read_root():
 @app.get("/api/health")
 def health_check():
     """Mandatory health check endpoint verifying engine status and sample data availability."""
-    candidate_dirs = [
-        Path(__file__).resolve().parent / "data",                         # backend/app/data
-        Path(__file__).resolve().parent.parent / "data",                  # backend/data
-        Path(__file__).resolve().parent.parent.parent / "data",           # project_root/data
-        Path.cwd() / "data",
-        Path.cwd() / "backend" / "app" / "data",
-    ]
-
-    curriculum_file = None
-    candidates_file = None
-
-    for d in candidate_dirs:
-        if (d / "sample_curriculum.json").exists():
-            curriculum_file = d / "sample_curriculum.json"
-            candidates_file = d / "sample_candidates.json"
-            break
-
-    curriculum_ok = curriculum_file is not None and curriculum_file.exists()
-    candidates_ok = candidates_file is not None and candidates_file.exists()
+    from app.data_loader import load_sample_curriculum, load_sample_candidates
     
-    curriculum_count = 0
-    candidate_count = 0
-    
-    if curriculum_ok:
-        try:
-            with open(curriculum_file, "r", encoding="utf-8") as f:
-                cdata = json.load(f)
-                curriculum_count = len(cdata.get("modules", []))
-        except Exception:
-            curriculum_ok = False
+    cdata, curr_file, curriculum_ok = load_sample_curriculum()
+    curriculum_count = len(cdata.get("modules", [])) if (curriculum_ok and cdata) else 0
 
-    if candidates_ok:
-        try:
-            with open(candidates_file, "r", encoding="utf-8") as f:
-                cand_data = json.load(f)
-                candidate_count = len(cand_data)
-        except Exception:
-            candidates_ok = False
+    cands, cand_file, candidates_ok = load_sample_candidates()
+    candidate_count = len(cands) if (candidates_ok and cands) else 0
 
     return {
-        "status": "healthy",
+        "status": "healthy" if curriculum_ok else "degraded",
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
         "deterministic_rules": {
@@ -90,6 +59,7 @@ def health_check():
             "curriculum_loaded": curriculum_ok,
             "modules_count": curriculum_count,
             "candidates_loaded": candidates_ok,
-            "synthetic_candidates_count": candidate_count
+            "synthetic_candidates_count": candidate_count,
+            "data_path": str(curr_file)
         }
     }

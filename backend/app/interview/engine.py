@@ -18,6 +18,9 @@ from app.interview.logger import interview_logger
 
 from app.interview.jd_analyzer import jd_analyzer
 from app.memory.service import candidate_memory_service
+import logging
+
+logger = logging.getLogger("SkillProof.Engine")
 
 class InterviewEngine:
     """Core Orchestrator for SkillProof Adaptive AI Technical Interviewer Engine."""
@@ -29,35 +32,24 @@ class InterviewEngine:
         self._load_demo_data()
 
     def _load_demo_data(self):
-        """Loads sample curriculum and candidates from data/ directory across local & Vercel deployment paths."""
-        candidate_dirs = [
-            Path(__file__).resolve().parent.parent / "data",                  # backend/app/data
-            Path(__file__).resolve().parent.parent.parent / "data",           # backend/data
-            Path(__file__).resolve().parent.parent.parent.parent / "data",    # project_root/data
-            Path.cwd() / "data",
-            Path.cwd() / "backend" / "app" / "data",
-        ]
+        """Loads sample curriculum and candidates from authoritative backend/data/ location."""
+        from app.data_loader import load_sample_curriculum, load_sample_candidates
+        
+        cdata, curr_file, curr_ok = load_sample_curriculum()
+        if curr_ok and cdata:
+            self._curriculum_cache = Curriculum(**cdata)
+            logger.info(f"[CURRICULUM_LOADED] Loaded curriculum from {curr_file}")
+        else:
+            logger.error(f"[CURRICULUM_ERROR] Failed to load curriculum from {curr_file}")
 
-        curr_file = None
-        cand_file = None
-
-        for d in candidate_dirs:
-            if (d / "sample_curriculum.json").exists():
-                curr_file = d / "sample_curriculum.json"
-                cand_file = d / "sample_candidates.json"
-                break
-
-        if curr_file and curr_file.exists():
-            with open(curr_file, "r", encoding="utf-8") as f:
-                cdata = json.load(f)
-                self._curriculum_cache = Curriculum(**cdata)
-
-        if cand_file and cand_file.exists():
-            with open(cand_file, "r", encoding="utf-8") as f:
-                cands = json.load(f)
-                for c in cands:
-                    cand_obj = Candidate(**c)
-                    self._candidates_cache[cand_obj.candidate_id] = cand_obj
+        cands, cand_file, cand_ok = load_sample_candidates()
+        if cand_ok and cands:
+            for c in cands:
+                cand_obj = Candidate(**c)
+                self._candidates_cache[cand_obj.candidate_id] = cand_obj
+            logger.info(f"[CANDIDATES_LOADED] Loaded {len(cands)} candidates from {cand_file}")
+        else:
+            logger.error(f"[CANDIDATES_ERROR] Failed to load candidates from {cand_file}")
 
     def get_all_topics(self) -> List[Tuple[CurriculumDay, Topic]]:
         """Returns flattened list of (CurriculumDay, Topic) tuples."""

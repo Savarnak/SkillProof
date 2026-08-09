@@ -1,0 +1,154 @@
+{
+  "curriculum_id": "curr_ai_eng_v1",
+  "title": "Applied AI Engineering & Systems",
+  "description": "Comprehensive 5-day curriculum covering embeddings, RAG architectures, LLM agents, system scaling, and AI evaluation.",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "module_id": "mod_foundations",
+      "title": "Module 1: Embeddings & Vector Search",
+      "days": [
+        {
+          "day_number": 1,
+          "day_id": "day_1_embeddings",
+          "title": "Day 1 — Embeddings & Vector Similarity",
+          "topics": [
+            {
+              "topic_id": "top_vector_spaces",
+              "name": "Vector Spaces & Similarity Metrics",
+              "description": "High-dimensional embedding representations, Cosine similarity, Dot product, Euclidean distance.",
+              "learning_objectives": [
+                "Explain how text tokens map to dense vector representations",
+                "Compare cosine similarity versus dot product for normalized vectors",
+                "Identify high-dimensionality distance trade-offs (curse of dimensionality)"
+              ],
+              "key_tools": ["OpenAI Embeddings", "tiktoken", "numpy"]
+            },
+            {
+              "topic_id": "top_vector_indexing",
+              "name": "Vector Indexing & HNSW",
+              "description": "Approximate Nearest Neighbor (ANN) search algorithms, Hierarchical Navigable Small World graphs.",
+              "learning_objectives": [
+                "Differentiate between exact k-NN and approximate ANN search",
+                "Explain graph construction in HNSW indexing"
+              ],
+              "key_tools": ["Pinecone", "Milvus", "pgvector", "FAISS"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module_id": "mod_rag",
+      "title": "Module 2: Retrieval-Augmented Generation (RAG)",
+      "days": [
+        {
+          "day_number": 2,
+          "day_id": "day_2_rag",
+          "title": "Day 2 — RAG Pipeline Architecture",
+          "topics": [
+            {
+              "topic_id": "top_chunking_retrieval",
+              "name": "Document Chunking & Hybrid Retrieval",
+              "description": "Chunking strategies (semantic, recursive), Hybrid search (BM25 lexical + Dense vector), Reciprocal Rank Fusion.",
+              "learning_objectives": [
+                "Analyze document chunk size impact on retrieval context window",
+                "Formulate hybrid retrieval strategies combining BM25 with vector search"
+              ],
+              "key_tools": ["LangChain", "LlamaIndex", "BM25"]
+            },
+            {
+              "topic_id": "top_rag_evaluation",
+              "name": "RAG Hallucination & Reranking",
+              "description": "Cross-encoder reranking, Groundedness verification, Query transformation.",
+              "learning_objectives": [
+                "Identify common RAG failure modes (retrieval failure vs generator hallucination)",
+                "Explain cross-encoder reranker mechanics"
+              ],
+              "key_tools": ["Cohere Rerank", "Ragas", "TruLens"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module_id": "mod_agents",
+      "title": "Module 3: Autonomous AI Agents & Tool Use",
+      "days": [
+        {
+          "day_number": 3,
+          "day_id": "day_3_agents",
+          "title": "Day 3 — Agentic Orchestration & Tool Calling",
+          "topics": [
+            {
+              "topic_id": "top_function_calling",
+              "name": "Structured Output & Function Calling",
+              "description": "JSON schema enforcement, tool declaration, argument validation.",
+              "learning_objectives": [
+                "Design robust Pydantic schemas for LLM function calling",
+                "Handle API rate limits and schema parsing exceptions gracefully"
+              ],
+              "key_tools": ["Pydantic", "Instructor", "OpenAI Tool Use API"]
+            },
+            {
+              "topic_id": "top_agent_loops",
+              "name": "ReAct Loop & Multi-Agent Communication",
+              "description": "Reasoning + Acting loops, state persistence, subagent delegation.",
+              "learning_objectives": [
+                "Implement stateful execution loops for autonomous agent steps",
+                "Design guardrails to prevent infinite tool loops"
+              ],
+              "key_tools": ["LangGraph", "AutoGen", "Custom Python Loops"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module_id": "mod_system_scaling",
+      "title": "Module 4: System Architecture & Vector DB Scaling",
+      "days": [
+        {
+          "day_number": 4,
+          "day_id": "day_4_scaling",
+          "title": "Day 4 — Production Scaling & Storage Optimization",
+          "topics": [
+            {
+              "topic_id": "top_vector_db_scaling",
+              "name": "PostgreSQL + pgvector vs Specialized Vector DBs",
+              "description": "Index maintenance, memory footprint, IVFFlat vs HNSW, sharding.",
+              "learning_objectives": [
+                "Evaluate operational complexity of pgvector vs dedicated vector databases",
+                "Calculate RAM requirements for high-dimensional vector caching"
+              ],
+              "key_tools": ["pgvector", "Qdrant", "Weaviate"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module_id": "mod_eval_security",
+      "title": "Module 5: AI Evaluation & Safety Guardrails",
+      "days": [
+        {
+          "day_number": 5,
+          "day_id": "day_5_eval",
+          "title": "Day 5 — Evaluation Metrics & Guardrails",
+          "topics": [
+            {
+              "topic_id": "top_eval_benchmarks",
+              "name": "LLM As A Judge & Metric Benchmarks",
+              "description": "Faithfulness, Answer Relevance, Semantic similarity benchmarks, Prompt Injection defense.",
+              "learning_objectives": [
+                "Construct automated test suites using LLM-as-a-judge patterns",
+                "Mitigate prompt injection and jailbreak vulnerabilities"
+              ],
+              "key_tools": ["Promptfoo", "Guardrails AI", "LangSmith"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
