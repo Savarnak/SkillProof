@@ -54,6 +54,8 @@ import datetime
 @router.post("", response_model=PS2InterviewResponse)
 @router.post("/", response_model=PS2InterviewResponse)
 def ps2_interview_adapter(req: PS2InterviewRequest):
+    if not interview_engine._curriculum_cache:
+        interview_engine._load_demo_data()
     session_id = req.sessionId.strip()
     existing_state = interview_engine.session_store.get_session(session_id)
 

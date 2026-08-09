@@ -54,6 +54,8 @@ class InterviewEngine:
     def get_all_topics(self) -> List[Tuple[CurriculumDay, Topic]]:
         """Returns flattened list of (CurriculumDay, Topic) tuples."""
         if not self._curriculum_cache:
+            self._load_demo_data()
+        if not self._curriculum_cache:
             raise ValueError("Curriculum data not loaded")
         result = []
         for module in self._curriculum_cache.modules:
@@ -126,6 +128,8 @@ class InterviewEngine:
             if not state.selectedTopics:
                 state.selectedTopics = jd_res.required_skills
 
+        if not self._curriculum_cache:
+            self._load_demo_data()
         curriculum = self._curriculum_cache
         if not curriculum:
             raise ValueError("Curriculum data unavailable")
@@ -482,6 +486,8 @@ class InterviewEngine:
             )
         )
 
+        if not self._curriculum_cache:
+            self._load_demo_data()
         curr_title = self._curriculum_cache.title if self._curriculum_cache else "AI Systems"
 
         # Calculate averages across assessed topics
